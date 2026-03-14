@@ -2,6 +2,8 @@ import { loadConfig } from "./config";
 import { GeminiClient } from "./geminiClient";
 import { runAgent } from "./runAgent";
 import type { Agent } from "./agent";
+import { openDatabase } from "./database";
+import { runMigrations } from "./migrations";
 
 const config = loadConfig();
 
@@ -34,3 +36,13 @@ export async function runAgentManually(agent: Agent): Promise<void> {
 }
 
 logHealth();
+
+void (async () => {
+  const db = openDatabase(process.env.DB_PATH ?? "agents.db");
+  try {
+    await runMigrations(db);
+  } catch (err: unknown) {
+    console.error("[index] Migration failed:", err);
+    process.exit(1);
+  }
+})();

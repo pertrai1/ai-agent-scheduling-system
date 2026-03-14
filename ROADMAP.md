@@ -28,18 +28,18 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 2: Persistence Foundation (Needed Before Scheduling Scale)
 
-- [ ] Create SQLite connection module.
-- [ ] Add migration runner setup.
-- [ ] Create `agents` table migration.
-- [ ] Create `executions` table migration.
-- [ ] Add repository function: insert agent.
-- [ ] Add repository function: fetch agent by id/name.
-- [ ] Add repository function: list agents.
-- [ ] Add repository function: update agent fields.
-- [ ] Add repository function: delete agent.
-- [ ] Add repository function: insert execution record.
-- [ ] Add repository function: list execution history by agent.
-- [ ] Add startup check that migrations run successfully.
+- [x] Create SQLite connection module.
+- [x] Add migration runner setup.
+- [x] Create `agents` table migration.
+- [x] Create `executions` table migration.
+- [x] Add repository function: insert agent.
+- [x] Add repository function: fetch agent by id/name.
+- [x] Add repository function: list agents.
+- [x] Add repository function: update agent fields.
+- [x] Add repository function: delete agent.
+- [x] Add repository function: insert execution record.
+- [x] Add repository function: list execution history by agent.
+- [x] Add startup check that migrations run successfully.
 
 ## Phase 3: Cron Scheduling Engine (Step 2)
 
@@ -163,6 +163,6 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 ## Suggested Execution Order
 
 - [x] Complete Phases 0-1 first.
-- [ ] Complete Phase 2 before fully implementing Phases 3-8.
+- [x] Complete Phase 2 before fully implementing Phases 3-8.
 - [ ] Deliver Phases 3-8 in order, validating each with tests.
 - [ ] Reserve Phases 9-10 for stabilization and enhancements.
