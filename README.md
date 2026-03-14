@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/7563670c-9675-45ae-9242-585da91be522" alt="AI Agent Scheduling System Logo" width="300" />
+</p>
+
 # AI Agent Scheduling System
 
 An AI-powered agent scheduling system that runs LLM-backed tasks automatically on a cron schedule and delivers results by email. Define named agents with task descriptions and schedules; the system handles execution, retries, email delivery, and health monitoring.
