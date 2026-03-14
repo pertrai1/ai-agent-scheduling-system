@@ -15,16 +15,16 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 1: Core Agent Execution (Step 1)
 
-- [ ] Define `Agent` schema (name, taskDescription, optional systemPrompt).
-- [ ] Define `ExecutionResult` schema (agentName, ranAt, status, response, error).
-- [ ] Create Gemini client wrapper with a single `generateText` method.
-- [ ] Implement prompt builder combining `systemPrompt` and `taskDescription`.
-- [ ] Implement `runAgent(agent)` returning structured success/failure result.
-- [ ] Catch and normalize LLM errors into a consistent error object/string.
-- [ ] Add manual run command/function for a single agent.
-- [ ] Add test: simple summarization agent returns success structure.
-- [ ] Add test: system prompt changes response style.
-- [ ] Add test: impossible task returns graceful result without crashing.
+- [x] Define `Agent` schema (name, taskDescription, optional systemPrompt).
+- [x] Define `ExecutionResult` schema (agentName, ranAt, status, response, error).
+- [x] Create Gemini client wrapper with a single `generateText` method.
+- [x] Implement prompt builder combining `systemPrompt` and `taskDescription`.
+- [x] Implement `runAgent(agent)` returning structured success/failure result.
+- [x] Catch and normalize LLM errors into a consistent error object/string.
+- [x] Add manual run command/function for a single agent.
+- [x] Add test: simple summarization agent returns success structure.
+- [x] Add test: system prompt changes response style.
+- [x] Add test: impossible task returns graceful result without crashing.
 
 ## Phase 2: Persistence Foundation (Needed Before Scheduling Scale)
 
@@ -162,7 +162,7 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Suggested Execution Order
 
-- [ ] Complete Phases 0-1 first.
+- [x] Complete Phases 0-1 first.
 - [ ] Complete Phase 2 before fully implementing Phases 3-8.
 - [ ] Deliver Phases 3-8 in order, validating each with tests.
 - [ ] Reserve Phases 9-10 for stabilization and enhancements.
