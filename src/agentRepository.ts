@@ -2,6 +2,7 @@ import type sqlite3 from "sqlite3";
 import type { Agent } from "./agent";
 import type { ExecutionResult } from "./agent";
 import { dbRun, dbGet, dbAll } from "./database";
+import { DEFAULT_RETRY_OPTIONS } from "./retryRunner";
 
 // ---------------------------------------------------------------------------
 // Stored types (DB rows include persistence metadata)
@@ -15,6 +16,9 @@ export interface StoredAgent {
   cronExpression?: string;
   enabled: boolean;
   lastRunAt?: string;
+  timeoutMs?: number;
+  maxRetries?: number;
+  backoffBaseMs?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,21 +31,26 @@ export interface StoredExecution {
   status: "success" | "failure";
   response?: string;
   error?: string;
+  attempts?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Row normalization helpers (SQLite returns null for absent columns)
 // ---------------------------------------------------------------------------
 
-type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled"> & {
+type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs"> & {
   systemPrompt: string | null;
   cronExpression: string | null;
   enabled: number;
   lastRunAt: string | null;
+  timeoutMs: number | null;
+  maxRetries: number | null;
+  backoffBaseMs: number | null;
 };
-type RawExecution = Omit<StoredExecution, "response" | "error"> & {
+type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts"> & {
   response: string | null;
   error: string | null;
+  attempts: number | null;
 };
 
 function normalizeAgent(row: RawAgent): StoredAgent {
@@ -51,6 +60,9 @@ function normalizeAgent(row: RawAgent): StoredAgent {
     cronExpression: row.cronExpression ?? undefined,
     enabled: !!row.enabled,
     lastRunAt: row.lastRunAt ?? undefined,
+    timeoutMs: row.timeoutMs ?? undefined,
+    maxRetries: row.maxRetries ?? undefined,
+    backoffBaseMs: row.backoffBaseMs ?? undefined,
   };
 }
 
@@ -59,6 +71,7 @@ function normalizeExecution(row: RawExecution): StoredExecution {
     ...row,
     response: row.response ?? undefined,
     error: row.error ?? undefined,
+    attempts: row.attempts ?? undefined,
   };
 }
 
@@ -73,14 +86,17 @@ export async function insertAgent(
   const now = new Date().toISOString();
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       agent.name,
       agent.taskDescription,
       agent.systemPrompt ?? null,
       agent.cronExpression ?? null,
       agent.enabled ? 1 : 0,
+      agent.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs,
+      agent.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries,
+      agent.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs,
       now,
       now,
     ]
@@ -114,7 +130,7 @@ export async function listAgents(
 }
 
 export type AgentUpdates = Partial<
-  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled">
+  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs">
 > & { lastRunAt?: string };
 
 export async function updateAgent(
@@ -136,14 +152,20 @@ export async function updateAgent(
     "enabled" in updates ? (updates.enabled ? 1 : 0) : existing.enabled ? 1 : 0;
   const lastRunAt =
     "lastRunAt" in updates ? (updates.lastRunAt ?? null) : existing.lastRunAt ?? null;
+  const timeoutMs =
+    "timeoutMs" in updates ? (updates.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs) : existing.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs;
+  const maxRetries =
+    "maxRetries" in updates ? (updates.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries) : existing.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries;
+  const backoffBaseMs =
+    "backoffBaseMs" in updates ? (updates.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs) : existing.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs;
 
   await dbRun(
     db,
     `UPDATE agents
      SET name = ?, taskDescription = ?, systemPrompt = ?, cronExpression = ?,
-         enabled = ?, lastRunAt = ?, updatedAt = ?
+         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, updatedAt = ?
      WHERE id = ?`,
-    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, updatedAt, id]
+    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, updatedAt, id]
   );
   return fetchAgentById(db, id);
 }
@@ -167,8 +189,8 @@ export async function insertExecution(
 ): Promise<StoredExecution> {
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO executions (agentId, agentName, ranAt, status, response, error)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO executions (agentId, agentName, ranAt, status, response, error, attempts)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       agentId,
       result.agentName,
@@ -176,6 +198,7 @@ export async function insertExecution(
       result.status,
       result.response ?? null,
       result.error ?? null,
+      result.attempts ?? null,
     ]
   );
   const row = await dbGet<RawExecution>(

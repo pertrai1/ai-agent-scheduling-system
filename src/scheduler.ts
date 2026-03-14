@@ -112,6 +112,9 @@ export class Scheduler {
       systemPrompt: storedAgent.systemPrompt,
       cronExpression: storedAgent.cronExpression,
       enabled: storedAgent.enabled,
+      timeoutMs: storedAgent.timeoutMs,
+      maxRetries: storedAgent.maxRetries,
+      backoffBaseMs: storedAgent.backoffBaseMs,
     };
 
     try {
