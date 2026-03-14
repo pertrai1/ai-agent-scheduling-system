@@ -33,6 +33,7 @@ export interface StoredExecution {
   response?: string;
   error?: string;
   attempts?: number;
+  durationMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,10 +50,11 @@ type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt
   backoffBaseMs: number | null;
   emailRecipient: string | null;
 };
-type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts"> & {
+type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts" | "durationMs"> & {
   response: string | null;
   error: string | null;
   attempts: number | null;
+  durationMs: number | null;
 };
 
 function normalizeAgent(row: RawAgent): StoredAgent {
@@ -75,6 +77,7 @@ function normalizeExecution(row: RawExecution): StoredExecution {
     response: row.response ?? undefined,
     error: row.error ?? undefined,
     attempts: row.attempts ?? undefined,
+    durationMs: row.durationMs ?? undefined,
   };
 }
 
@@ -188,6 +191,9 @@ export async function deleteAgent(
 // Execution repository
 // ---------------------------------------------------------------------------
 
+/** Maximum number of execution records retained per agent. */
+const MAX_EXECUTIONS_PER_AGENT = 100;
+
 export async function insertExecution(
   db: sqlite3.Database,
   agentId: number,
@@ -195,8 +201,8 @@ export async function insertExecution(
 ): Promise<StoredExecution> {
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO executions (agentId, agentName, ranAt, status, response, error, attempts)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO executions (agentId, agentName, ranAt, status, response, error, attempts, durationMs)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       agentId,
       result.agentName,
@@ -205,8 +211,24 @@ export async function insertExecution(
       result.response ?? null,
       result.error ?? null,
       result.attempts ?? null,
+      result.durationMs ?? null,
     ]
   );
+
+  // Enforce rolling history cap: delete oldest rows beyond the limit
+  await dbRun(
+    db,
+    `DELETE FROM executions
+     WHERE agentId = ?
+       AND id NOT IN (
+         SELECT id FROM executions
+         WHERE agentId = ?
+         ORDER BY ranAt DESC
+         LIMIT ?
+       )`,
+    [agentId, agentId, MAX_EXECUTIONS_PER_AGENT]
+  );
+
   const row = await dbGet<RawExecution>(
     db,
     "SELECT * FROM executions WHERE id = ?",

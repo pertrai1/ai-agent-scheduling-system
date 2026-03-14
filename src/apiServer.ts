@@ -13,6 +13,7 @@ import {
 } from "./agentRepository";
 import { validateCronExpression } from "./cronValidator";
 import { parseNaturalLanguageSchedule, isParsedSchedule } from "./nlScheduleParser";
+import { getSystemStatus } from "./observability";
 
 // ---------------------------------------------------------------------------
 // Request body schemas
@@ -139,6 +140,12 @@ export class ApiServer {
       const agentsRoot = /^\/agents$/.exec(path);
       const agentById = /^\/agents\/(\d+)$/.exec(path);
       const executionsByAgent = /^\/agents\/(\d+)\/executions$/.exec(path);
+      const statusRoute = /^\/status$/.exec(path);
+
+      if (statusRoute) {
+        if (method === "GET") return await this.handleStatus(res);
+        return sendJson(res, 405, { error: "Method not allowed" });
+      }
 
       if (agentsRoot) {
         if (method === "GET") return await this.handleListAgents(res);
@@ -321,5 +328,10 @@ export class ApiServer {
     }
     const executions = await listExecutionsByAgentId(this.db, id);
     sendJson(res, 200, executions);
+  }
+
+  private async handleStatus(res: http.ServerResponse): Promise<void> {
+    const status = await getSystemStatus(this.db);
+    sendJson(res, 200, status);
   }
 }

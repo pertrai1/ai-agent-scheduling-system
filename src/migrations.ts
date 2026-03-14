@@ -29,6 +29,7 @@ const CREATE_EXECUTIONS_TABLE = `
     response TEXT,
     error TEXT,
     attempts INTEGER,
+    durationMs INTEGER,
     FOREIGN KEY (agentId) REFERENCES agents(id) ON DELETE CASCADE
   )
 `;
@@ -64,6 +65,7 @@ export async function runMigrations(db: sqlite3.Database): Promise<void> {
   await addColumnIfMissing(db, "agents", "backoffBaseMs", "INTEGER NOT NULL DEFAULT 1000");
   await addColumnIfMissing(db, "agents", "emailRecipient", "TEXT");
   await addColumnIfMissing(db, "executions", "attempts", "INTEGER");
+  await addColumnIfMissing(db, "executions", "durationMs", "INTEGER");
 
   console.log("[migrations] Migrations completed successfully.");
 }
