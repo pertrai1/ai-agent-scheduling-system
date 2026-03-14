@@ -7,11 +7,12 @@ import type { ToolRegistry } from "./toolRegistry";
 export async function runAgent(
   agent: Agent,
   client: GeminiClient,
-  toolRegistry?: ToolRegistry
+  toolRegistry?: ToolRegistry,
+  previousOutput?: string
 ): Promise<ExecutionResult> {
   const ranAt = new Date();
   const startMs = Date.now();
-  const prompt = buildPrompt(agent);
+  const prompt = buildPrompt(agent, previousOutput);
 
   const timeoutMs = agent.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs;
   const maxRetries = agent.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries;

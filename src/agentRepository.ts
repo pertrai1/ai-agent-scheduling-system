@@ -21,6 +21,7 @@ export interface StoredAgent {
   backoffBaseMs?: number;
   emailRecipient?: string;
   tools?: string[];
+  chainTo?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,7 +42,7 @@ export interface StoredExecution {
 // Row normalization helpers (SQLite returns null for absent columns)
 // ---------------------------------------------------------------------------
 
-type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools"> & {
+type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools" | "chainTo"> & {
   systemPrompt: string | null;
   cronExpression: string | null;
   enabled: number;
@@ -51,6 +52,7 @@ type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt
   backoffBaseMs: number | null;
   emailRecipient: string | null;
   tools: string | null;
+  chainTo: string | null;
 };
 type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts" | "durationMs"> & {
   response: string | null;
@@ -71,6 +73,7 @@ function normalizeAgent(row: RawAgent): StoredAgent {
     backoffBaseMs: row.backoffBaseMs ?? undefined,
     emailRecipient: row.emailRecipient ?? undefined,
     tools: row.tools ? (JSON.parse(row.tools) as string[]) : undefined,
+    chainTo: row.chainTo ?? undefined,
   };
 }
 
@@ -95,8 +98,8 @@ export async function insertAgent(
   const now = new Date().toISOString();
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, chainTo, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       agent.name,
       agent.taskDescription,
@@ -108,6 +111,7 @@ export async function insertAgent(
       agent.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs,
       agent.emailRecipient ?? null,
       agent.tools && agent.tools.length > 0 ? JSON.stringify(agent.tools) : null,
+      agent.chainTo ?? null,
       now,
       now,
     ]
@@ -141,7 +145,7 @@ export async function listAgents(
 }
 
 export type AgentUpdates = Partial<
-  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools">
+  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools" | "chainTo">
 > & { lastRunAt?: string };
 
 export async function updateAgent(
@@ -175,14 +179,16 @@ export async function updateAgent(
     "tools" in updates
       ? updates.tools && updates.tools.length > 0 ? JSON.stringify(updates.tools) : null
       : existing.tools && existing.tools.length > 0 ? JSON.stringify(existing.tools) : null;
+  const chainTo =
+    "chainTo" in updates ? (updates.chainTo ?? null) : existing.chainTo ?? null;
 
   await dbRun(
     db,
     `UPDATE agents
      SET name = ?, taskDescription = ?, systemPrompt = ?, cronExpression = ?,
-         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, emailRecipient = ?, tools = ?, updatedAt = ?
+         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, emailRecipient = ?, tools = ?, chainTo = ?, updatedAt = ?
      WHERE id = ?`,
-    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, updatedAt, id]
+    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, chainTo, updatedAt, id]
   );
   return fetchAgentById(db, id);
 }

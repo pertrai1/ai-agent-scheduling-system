@@ -30,6 +30,7 @@ const CreateAgentBodySchema = z.object({
   backoffBaseMs: z.number().int().positive().optional(),
   emailRecipient: z.string().email("emailRecipient must be a valid email").optional(),
   tools: z.array(z.string()).optional(),
+  chainTo: z.string().optional(),
 });
 
 const UpdateAgentBodySchema = z.object({
@@ -43,6 +44,7 @@ const UpdateAgentBodySchema = z.object({
   backoffBaseMs: z.number().int().positive().optional(),
   emailRecipient: z.string().email().optional(),
   tools: z.array(z.string()).optional(),
+  chainTo: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -239,6 +241,7 @@ export class ApiServer {
         backoffBaseMs: data.backoffBaseMs,
         emailRecipient: data.emailRecipient,
         tools: data.tools,
+        chainTo: data.chainTo,
       });
       sendJson(res, 201, agent);
     } catch (err: unknown) {

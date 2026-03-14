@@ -5,6 +5,7 @@ import {
   listAgents,
   updateAgent,
   insertExecution,
+  fetchAgentByName,
 } from "./agentRepository";
 import { runAgent } from "./runAgent";
 import type { GeminiClient } from "./geminiClient";
@@ -255,7 +256,15 @@ export class Scheduler {
     return promise;
   }
 
-  private async runAndRecord(storedAgent: StoredAgent, tickNow: Date): Promise<void> {
+  private async runAndRecord(
+    storedAgent: StoredAgent,
+    tickNow: Date,
+    previousOutput?: string,
+    chainDepth = 0
+  ): Promise<void> {
+    /** Maximum chain depth to prevent infinite loops. */
+    const MAX_CHAIN_DEPTH = 10;
+
     const agentDef = {
       name: storedAgent.name,
       taskDescription: storedAgent.taskDescription,
@@ -267,13 +276,14 @@ export class Scheduler {
       backoffBaseMs: storedAgent.backoffBaseMs,
       emailRecipient: storedAgent.emailRecipient,
       tools: storedAgent.tools,
+      chainTo: storedAgent.chainTo,
     };
 
     const startTime = new Date();
     logExecutionStart("scheduler", storedAgent.name, startTime);
 
     try {
-      const result = await runAgent(agentDef, this.client, this.toolRegistry);
+      const result = await runAgent(agentDef, this.client, this.toolRegistry, previousOutput);
 
       // `lastRunAt` stores the scheduled tick time (the minute boundary that
       // triggered this run), not the wall-clock completion time.  This lets
@@ -298,6 +308,36 @@ export class Scheduler {
       if (this.config) {
         const notifyFn = result.status === "success" ? sendSuccess : sendFailure;
         await notifyFn(this.config, agentDef, result);
+      }
+
+      // Agent chaining: if the run succeeded and the agent has a chainTo target,
+      // look up the target agent and run it with this result as previousOutput.
+      if (result.status === "success" && storedAgent.chainTo) {
+        if (chainDepth >= MAX_CHAIN_DEPTH) {
+          structuredLog("warn", "scheduler", "Chain depth limit reached; aborting chain", {
+            agentName: storedAgent.name,
+            chainTo: storedAgent.chainTo,
+            chainDepth,
+          });
+          return;
+        }
+
+        const chainedAgent = await fetchAgentByName(this.db, storedAgent.chainTo);
+        if (!chainedAgent) {
+          structuredLog("warn", "scheduler", "Chained agent not found", {
+            agentName: storedAgent.name,
+            chainTo: storedAgent.chainTo,
+          });
+          return;
+        }
+
+        structuredLog("info", "scheduler", "Running chained agent", {
+          fromAgent: storedAgent.name,
+          toAgent: chainedAgent.name,
+          chainDepth: chainDepth + 1,
+        });
+
+        await this.runAndRecord(chainedAgent, tickNow, result.response, chainDepth + 1);
       }
     } catch (err: unknown) {
       structuredLog("error", "scheduler", "Unexpected error running agent", {
