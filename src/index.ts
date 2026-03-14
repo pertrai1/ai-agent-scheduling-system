@@ -47,6 +47,6 @@ void (async () => {
     process.exit(1);
   }
 
-  const scheduler = new Scheduler(db, geminiClient);
+  const scheduler = new Scheduler(db, geminiClient, config);
   scheduler.start();
 })();

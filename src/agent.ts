@@ -9,6 +9,7 @@ export const AgentSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).optional(),
   backoffBaseMs: z.number().int().positive().optional(),
+  emailRecipient: z.string().email().optional(),
 });
 
 export type Agent = z.infer<typeof AgentSchema>;

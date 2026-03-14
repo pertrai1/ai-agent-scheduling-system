@@ -13,6 +13,7 @@ const CREATE_AGENTS_TABLE = `
     timeoutMs INTEGER NOT NULL DEFAULT 60000,
     maxRetries INTEGER NOT NULL DEFAULT 3,
     backoffBaseMs INTEGER NOT NULL DEFAULT 1000,
+    emailRecipient TEXT,
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )
@@ -61,6 +62,7 @@ export async function runMigrations(db: sqlite3.Database): Promise<void> {
   await addColumnIfMissing(db, "agents", "timeoutMs", "INTEGER NOT NULL DEFAULT 60000");
   await addColumnIfMissing(db, "agents", "maxRetries", "INTEGER NOT NULL DEFAULT 3");
   await addColumnIfMissing(db, "agents", "backoffBaseMs", "INTEGER NOT NULL DEFAULT 1000");
+  await addColumnIfMissing(db, "agents", "emailRecipient", "TEXT");
   await addColumnIfMissing(db, "executions", "attempts", "INTEGER");
 
   console.log("[migrations] Migrations completed successfully.");

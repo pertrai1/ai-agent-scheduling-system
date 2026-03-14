@@ -75,34 +75,34 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 5: Resilience (Timeout + Retry) (Step 4)
 
-- [ ] Extend agent config with `timeoutMs`, `maxRetries`, `backoffBaseMs`.
-- [ ] Add default settings (e.g., timeout 60s, retries 3).
-- [ ] Wrap LLM execution with timeout controller.
-- [ ] Create retry runner utility with exponential backoff + jitter.
-- [ ] Retry only transient failures/timeouts (or configurable policy).
-- [ ] Record attempt count and final outcome in execution record.
-- [ ] Ensure exhausted failures are marked permanent failure.
-- [ ] Ensure failed run does not block next scheduled run.
-- [ ] Add test: timeout triggers retry sequence.
-- [ ] Add test: failing call retries exact configured count.
-- [ ] Add test: backoff delays increase across attempts.
-- [ ] Add test: success on first attempt performs zero retries.
-- [ ] Add test: next schedule still runs after permanent failure.
+- [x] Extend agent config with `timeoutMs`, `maxRetries`, `backoffBaseMs`.
+- [x] Add default settings (e.g., timeout 60s, retries 3).
+- [x] Wrap LLM execution with timeout controller.
+- [x] Create retry runner utility with exponential backoff + jitter.
+- [x] Retry only transient failures/timeouts (or configurable policy).
+- [x] Record attempt count and final outcome in execution record.
+- [x] Ensure exhausted failures are marked permanent failure.
+- [x] Ensure failed run does not block next scheduled run.
+- [x] Add test: timeout triggers retry sequence.
+- [x] Add test: failing call retries exact configured count.
+- [x] Add test: backoff delays increase across attempts.
+- [x] Add test: success on first attempt performs zero retries.
+- [x] Add test: next schedule still runs after permanent failure.
 
 ## Phase 6: Email Notifications (Step 5)
 
-- [ ] Add email config schema (provider/SMTP host, port, auth, sender).
-- [ ] Add email client abstraction (`sendSuccess`, `sendFailure`).
-- [ ] Add agent field `emailRecipient`.
-- [ ] Implement success email template (subject, timestamp, formatted output).
-- [ ] Implement failure email template (error details + metadata).
-- [ ] Trigger email send after agent execution completes.
-- [ ] Decouple email retry from agent execution retry.
-- [ ] Add email-delivery retry policy and logging.
-- [ ] Add test: success execution sends properly formatted email.
-- [ ] Add test: failed execution sends failure email.
-- [ ] Add test: broken email config does not fail agent execution.
-- [ ] Add test: email delivery retries and logs failures.
+- [x] Add email config schema (provider/SMTP host, port, auth, sender).
+- [x] Add email client abstraction (`sendSuccess`, `sendFailure`).
+- [x] Add agent field `emailRecipient`.
+- [x] Implement success email template (subject, timestamp, formatted output).
+- [x] Implement failure email template (error details + metadata).
+- [x] Trigger email send after agent execution completes.
+- [x] Decouple email retry from agent execution retry.
+- [x] Add email-delivery retry policy and logging.
+- [x] Add test: success execution sends properly formatted email.
+- [x] Add test: failed execution sends failure email.
+- [x] Add test: broken email config does not fail agent execution.
+- [x] Add test: email delivery retries and logs failures.
 
 ## Phase 7: Management Interface (Step 6)
 
@@ -165,5 +165,6 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 - [x] Complete Phases 0-1 first.
 - [x] Complete Phase 2 before fully implementing Phases 3-8.
 - [x] Deliver Phases 3-4 in order, validating each with tests.
-- [ ] Deliver Phases 5-8 in order, validating each with tests.
+- [x] Deliver Phases 5-6 in order, validating each with tests.
+- [ ] Deliver Phases 7-8 in order, validating each with tests.
 - [ ] Reserve Phases 9-10 for stabilization and enhancements.

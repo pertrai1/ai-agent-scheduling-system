@@ -8,6 +8,8 @@ import {
 } from "./agentRepository";
 import { runAgent } from "./runAgent";
 import type { GeminiClient } from "./geminiClient";
+import type { Config } from "./config";
+import { sendSuccess, sendFailure } from "./emailNotifier";
 
 /**
  * Returns true when the given stored agent is due to run at the minute
@@ -42,12 +44,21 @@ const TICK_INTERVAL_MS = 60_000; // 1 minute
 export class Scheduler {
   private db: sqlite3.Database;
   private client: GeminiClient;
+  private config: Config | undefined;
   private tickTimer: NodeJS.Timeout | null = null;
   private alignTimer: NodeJS.Timeout | null = null;
 
-  constructor(db: sqlite3.Database, client: GeminiClient) {
+  /**
+   * @param db     SQLite database connection.
+   * @param client Gemini LLM client.
+   * @param config Application config used for email notifications.
+   *               When omitted, email notifications are silently disabled
+   *               (useful in tests or environments without SMTP).
+   */
+  constructor(db: sqlite3.Database, client: GeminiClient, config?: Config) {
     this.db = db;
     this.client = client;
+    this.config = config;
   }
 
   /**
@@ -115,6 +126,7 @@ export class Scheduler {
       timeoutMs: storedAgent.timeoutMs,
       maxRetries: storedAgent.maxRetries,
       backoffBaseMs: storedAgent.backoffBaseMs,
+      emailRecipient: storedAgent.emailRecipient,
     };
 
     try {
@@ -128,6 +140,11 @@ export class Scheduler {
       console.log(
         `[scheduler] Agent "${storedAgent.name}" finished with status: ${result.status}`
       );
+
+      if (this.config) {
+        const notifyFn = result.status === "success" ? sendSuccess : sendFailure;
+        await notifyFn(this.config, agentDef, result);
+      }
     } catch (err: unknown) {
       console.error(
         `[scheduler] Unexpected error running agent "${storedAgent.name}":`,

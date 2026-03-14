@@ -19,6 +19,7 @@ export interface StoredAgent {
   timeoutMs?: number;
   maxRetries?: number;
   backoffBaseMs?: number;
+  emailRecipient?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,7 +39,7 @@ export interface StoredExecution {
 // Row normalization helpers (SQLite returns null for absent columns)
 // ---------------------------------------------------------------------------
 
-type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs"> & {
+type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient"> & {
   systemPrompt: string | null;
   cronExpression: string | null;
   enabled: number;
@@ -46,6 +47,7 @@ type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt
   timeoutMs: number | null;
   maxRetries: number | null;
   backoffBaseMs: number | null;
+  emailRecipient: string | null;
 };
 type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts"> & {
   response: string | null;
@@ -63,6 +65,7 @@ function normalizeAgent(row: RawAgent): StoredAgent {
     timeoutMs: row.timeoutMs ?? undefined,
     maxRetries: row.maxRetries ?? undefined,
     backoffBaseMs: row.backoffBaseMs ?? undefined,
+    emailRecipient: row.emailRecipient ?? undefined,
   };
 }
 
@@ -86,8 +89,8 @@ export async function insertAgent(
   const now = new Date().toISOString();
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       agent.name,
       agent.taskDescription,
@@ -97,6 +100,7 @@ export async function insertAgent(
       agent.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs,
       agent.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries,
       agent.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs,
+      agent.emailRecipient ?? null,
       now,
       now,
     ]
@@ -130,7 +134,7 @@ export async function listAgents(
 }
 
 export type AgentUpdates = Partial<
-  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs">
+  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient">
 > & { lastRunAt?: string };
 
 export async function updateAgent(
@@ -158,14 +162,16 @@ export async function updateAgent(
     "maxRetries" in updates ? (updates.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries) : existing.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries;
   const backoffBaseMs =
     "backoffBaseMs" in updates ? (updates.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs) : existing.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs;
+  const emailRecipient =
+    "emailRecipient" in updates ? (updates.emailRecipient ?? null) : existing.emailRecipient ?? null;
 
   await dbRun(
     db,
     `UPDATE agents
      SET name = ?, taskDescription = ?, systemPrompt = ?, cronExpression = ?,
-         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, updatedAt = ?
+         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, emailRecipient = ?, updatedAt = ?
      WHERE id = ?`,
-    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, updatedAt, id]
+    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, updatedAt, id]
   );
   return fetchAgentById(db, id);
 }
