@@ -309,6 +309,7 @@ describe("Scheduler – agent chaining", () => {
 
     const client = makeMockClient("cyclic output");
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const scheduler = new Scheduler(db, client);
     await scheduler.tick(new Date("2026-01-01T10:01:00.000Z"));
@@ -319,7 +320,12 @@ describe("Scheduler – agent chaining", () => {
     const callCount = (client.generateText as ReturnType<typeof vi.fn>).mock.calls.length;
     expect(callCount).toBeLessThanOrEqual(11);
 
+    // The depth guard warning should have been emitted via structuredLog (which uses console.error for warn level)
+    const errorCalls = errorSpy.mock.calls.map((args) => args.join(" "));
+    expect(errorCalls.some((msg) => msg.includes("Chain depth limit reached"))).toBe(true);
+
     warnSpy.mockRestore();
+    errorSpy.mockRestore();
     await closeDatabase(db);
   });
 });

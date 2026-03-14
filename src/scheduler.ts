@@ -324,7 +324,7 @@ export class Scheduler {
 
         const chainedAgent = await fetchAgentByName(this.db, storedAgent.chainTo);
         if (!chainedAgent) {
-          structuredLog("warn", "scheduler", "Chained agent not found", {
+          structuredLog("warn", "scheduler", "Chained agent not found; ensure the target agent exists or update the chainTo field", {
             agentName: storedAgent.name,
             chainTo: storedAgent.chainTo,
           });
