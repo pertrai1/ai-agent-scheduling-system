@@ -10,6 +10,7 @@ export const AgentSchema = z.object({
   maxRetries: z.number().int().min(0).optional(),
   backoffBaseMs: z.number().int().positive().optional(),
   emailRecipient: z.string().email().optional(),
+  tools: z.array(z.string()).optional(),
 });
 
 export type Agent = z.infer<typeof AgentSchema>;

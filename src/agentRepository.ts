@@ -20,6 +20,7 @@ export interface StoredAgent {
   maxRetries?: number;
   backoffBaseMs?: number;
   emailRecipient?: string;
+  tools?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -40,7 +41,7 @@ export interface StoredExecution {
 // Row normalization helpers (SQLite returns null for absent columns)
 // ---------------------------------------------------------------------------
 
-type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient"> & {
+type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools"> & {
   systemPrompt: string | null;
   cronExpression: string | null;
   enabled: number;
@@ -49,6 +50,7 @@ type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt
   maxRetries: number | null;
   backoffBaseMs: number | null;
   emailRecipient: string | null;
+  tools: string | null;
 };
 type RawExecution = Omit<StoredExecution, "response" | "error" | "attempts" | "durationMs"> & {
   response: string | null;
@@ -68,6 +70,7 @@ function normalizeAgent(row: RawAgent): StoredAgent {
     maxRetries: row.maxRetries ?? undefined,
     backoffBaseMs: row.backoffBaseMs ?? undefined,
     emailRecipient: row.emailRecipient ?? undefined,
+    tools: row.tools ? (JSON.parse(row.tools) as string[]) : undefined,
   };
 }
 
@@ -92,8 +95,8 @@ export async function insertAgent(
   const now = new Date().toISOString();
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       agent.name,
       agent.taskDescription,
@@ -104,6 +107,7 @@ export async function insertAgent(
       agent.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries,
       agent.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs,
       agent.emailRecipient ?? null,
+      agent.tools && agent.tools.length > 0 ? JSON.stringify(agent.tools) : null,
       now,
       now,
     ]
@@ -137,7 +141,7 @@ export async function listAgents(
 }
 
 export type AgentUpdates = Partial<
-  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient">
+  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled" | "timeoutMs" | "maxRetries" | "backoffBaseMs" | "emailRecipient" | "tools">
 > & { lastRunAt?: string };
 
 export async function updateAgent(
@@ -167,14 +171,18 @@ export async function updateAgent(
     "backoffBaseMs" in updates ? (updates.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs) : existing.backoffBaseMs ?? DEFAULT_RETRY_OPTIONS.backoffBaseMs;
   const emailRecipient =
     "emailRecipient" in updates ? (updates.emailRecipient ?? null) : existing.emailRecipient ?? null;
+  const tools =
+    "tools" in updates
+      ? updates.tools && updates.tools.length > 0 ? JSON.stringify(updates.tools) : null
+      : existing.tools && existing.tools.length > 0 ? JSON.stringify(existing.tools) : null;
 
   await dbRun(
     db,
     `UPDATE agents
      SET name = ?, taskDescription = ?, systemPrompt = ?, cronExpression = ?,
-         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, emailRecipient = ?, updatedAt = ?
+         enabled = ?, lastRunAt = ?, timeoutMs = ?, maxRetries = ?, backoffBaseMs = ?, emailRecipient = ?, tools = ?, updatedAt = ?
      WHERE id = ?`,
-    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, updatedAt, id]
+    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, timeoutMs, maxRetries, backoffBaseMs, emailRecipient, tools, updatedAt, id]
   );
   return fetchAgentById(db, id);
 }

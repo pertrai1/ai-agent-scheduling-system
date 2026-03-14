@@ -11,6 +11,7 @@ import type { GeminiClient } from "./geminiClient";
 import type { Config } from "./config";
 import { sendSuccess, sendFailure } from "./emailNotifier";
 import { structuredLog, logExecutionStart, logExecutionEnd } from "./logger";
+import type { ToolRegistry } from "./toolRegistry";
 
 // ---------------------------------------------------------------------------
 // Concurrency limiter (simple semaphore)
@@ -61,7 +62,7 @@ export class Semaphore {
 }
 
 /** Default maximum number of concurrent LLM calls. */
-const DEFAULT_MAX_CONCURRENT_LLM = 5;
+export const DEFAULT_MAX_CONCURRENT_LLM = 5;
 
 // ---------------------------------------------------------------------------
 // Idempotency helpers
@@ -126,6 +127,7 @@ export class Scheduler {
   private db: sqlite3.Database;
   private client: GeminiClient;
   private config: Config | undefined;
+  private toolRegistry: ToolRegistry | undefined;
   private tickTimer: NodeJS.Timeout | null = null;
   private alignTimer: NodeJS.Timeout | null = null;
   /** Tracks in-flight run promises so graceful shutdown can await them. */
@@ -140,16 +142,19 @@ export class Scheduler {
    *                       When omitted, email notifications are silently disabled
    *                       (useful in tests or environments without SMTP).
    * @param maxConcurrent  Maximum number of concurrent LLM calls (default 5).
+   * @param toolRegistry   Optional registry of tools available to agents.
    */
   constructor(
     db: sqlite3.Database,
     client: GeminiClient,
     config?: Config,
-    maxConcurrent = DEFAULT_MAX_CONCURRENT_LLM
+    maxConcurrent = DEFAULT_MAX_CONCURRENT_LLM,
+    toolRegistry?: ToolRegistry
   ) {
     this.db = db;
     this.client = client;
     this.config = config;
+    this.toolRegistry = toolRegistry;
     this.semaphore = new Semaphore(maxConcurrent);
   }
 
@@ -261,13 +266,14 @@ export class Scheduler {
       maxRetries: storedAgent.maxRetries,
       backoffBaseMs: storedAgent.backoffBaseMs,
       emailRecipient: storedAgent.emailRecipient,
+      tools: storedAgent.tools,
     };
 
     const startTime = new Date();
     logExecutionStart("scheduler", storedAgent.name, startTime);
 
     try {
-      const result = await runAgent(agentDef, this.client);
+      const result = await runAgent(agentDef, this.client, this.toolRegistry);
 
       // `lastRunAt` stores the scheduled tick time (the minute boundary that
       // triggered this run), not the wall-clock completion time.  This lets
