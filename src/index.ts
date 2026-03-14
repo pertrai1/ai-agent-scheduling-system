@@ -1,4 +1,6 @@
-import { config } from "./config";
+import { loadConfig } from "./config";
+
+const config = loadConfig();
 
 function logHealth(): void {
   console.log("[AI Agent Scheduling System] Service starting...");

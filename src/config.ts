@@ -35,4 +35,4 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return result.data;
 }
 
-export const config = loadConfig();
+
