@@ -25,6 +25,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     SMTP_PASS: undefined,
     EMAIL_FROM: "noreply@example.com",
     PORT: 3000,
+    MAX_CONCURRENT_LLM: 5,
+    LLM_STAGGER_MS: 500,
     NODE_ENV: "test",
     LOG_LEVEL: "info",
     ...overrides,

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { openDatabase, closeDatabase } from "../database";
 import { runMigrations } from "../migrations";
 import { insertAgent, updateAgent, listExecutionsByAgentId } from "../agentRepository";
-import { isAgentDueNow, Scheduler } from "../scheduler";
+import { isAgentDueNow, Scheduler, sleep, DEFAULT_STAGGER_MS } from "../scheduler";
 import type { StoredAgent } from "../agentRepository";
 import type { GeminiClient } from "../geminiClient";
 import type sqlite3 from "sqlite3";
@@ -256,6 +256,118 @@ describe("Scheduler.tick", () => {
     const executions = await listExecutionsByAgentId(db, stored.id);
     expect(executions).toHaveLength(1);
     expect(executions[0].status).toBe("success");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scheduler – rate-limit-aware staggering
+// ---------------------------------------------------------------------------
+
+describe("Scheduler staggering", () => {
+  let db: sqlite3.Database;
+
+  beforeEach(async () => {
+    db = await openTestDb();
+  });
+
+  afterEach(async () => {
+    await closeDatabase(db);
+  });
+
+  it("sleep() resolves after the specified delay", async () => {
+    const start = Date.now();
+    await sleep(50);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(40);
+  });
+
+  it("DEFAULT_STAGGER_MS is a positive number", () => {
+    expect(typeof DEFAULT_STAGGER_MS).toBe("number");
+    expect(DEFAULT_STAGGER_MS).toBeGreaterThan(0);
+  });
+
+  it("runs all agents even with staggerMs > 0 (all calls still happen)", async () => {
+    const client = makeMockClient("response");
+    await insertAgent(db, {
+      name: "Stagger Alpha",
+      taskDescription: "Task A",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+    await insertAgent(db, {
+      name: "Stagger Beta",
+      taskDescription: "Task B",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+    await insertAgent(db, {
+      name: "Stagger Gamma",
+      taskDescription: "Task C",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+
+    // Use a small stagger (20 ms) so the test runs quickly
+    const scheduler = new Scheduler(db, client, undefined, 5, undefined, 20);
+    const now = new Date("2026-01-01T10:01:00.000Z");
+    await scheduler.tick(now);
+
+    // All three agents must have been called despite the stagger
+    expect(client.generateText).toHaveBeenCalledTimes(3);
+  });
+
+  it("staggerMs=0 disables staggering and all agents still run", async () => {
+    const client = makeMockClient("response");
+    await insertAgent(db, {
+      name: "No-Stagger Alpha",
+      taskDescription: "Task A",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+    await insertAgent(db, {
+      name: "No-Stagger Beta",
+      taskDescription: "Task B",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+
+    const scheduler = new Scheduler(db, client, undefined, 5, undefined, 0);
+    const now = new Date("2026-01-01T10:01:00.000Z");
+    await scheduler.tick(now);
+
+    expect(client.generateText).toHaveBeenCalledTimes(2);
+  });
+
+  it("stagger delays successive launches by approximately staggerMs per agent", async () => {
+    const launchTimes: number[] = [];
+    const client: GeminiClient = {
+      generateText: vi.fn().mockImplementation(async () => {
+        launchTimes.push(Date.now());
+        return "ok";
+      }),
+    } as unknown as GeminiClient;
+
+    await insertAgent(db, {
+      name: "Time Agent 1",
+      taskDescription: "Task 1",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+    await insertAgent(db, {
+      name: "Time Agent 2",
+      taskDescription: "Task 2",
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+
+    const staggerMs = 50;
+    const scheduler = new Scheduler(db, client, undefined, 5, undefined, staggerMs);
+    const now = new Date("2026-01-01T10:01:00.000Z");
+    await scheduler.tick(now);
+
+    expect(launchTimes).toHaveLength(2);
+    // Second agent should start at least staggerMs ms after the first
+    const gap = launchTimes[1] - launchTimes[0];
+    expect(gap).toBeGreaterThanOrEqual(staggerMs - 10); // allow 10 ms tolerance
   });
 });
 

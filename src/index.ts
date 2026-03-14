@@ -4,7 +4,7 @@ import { runAgent } from "./runAgent";
 import type { Agent } from "./agent";
 import { openDatabase, closeDatabase } from "./database";
 import { runMigrations } from "./migrations";
-import { Scheduler, DEFAULT_MAX_CONCURRENT_LLM } from "./scheduler";
+import { Scheduler } from "./scheduler";
 import { ApiServer } from "./apiServer";
 import { structuredLog } from "./logger";
 import { createDefaultToolRegistry } from "./builtinTools";
@@ -50,7 +50,7 @@ void (async () => {
     process.exit(1);
   }
 
-  const scheduler = new Scheduler(db, geminiClient, config, DEFAULT_MAX_CONCURRENT_LLM, createDefaultToolRegistry());
+  const scheduler = new Scheduler(db, geminiClient, config, config.MAX_CONCURRENT_LLM, createDefaultToolRegistry(), config.LLM_STAGGER_MS);
   scheduler.start();
 
   const port = config.PORT;

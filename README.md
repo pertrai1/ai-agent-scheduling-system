@@ -19,6 +19,7 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - [Scheduling](#scheduling)
 - [Resilience (Timeout & Retry)](#resilience-timeout--retry)
 - [Email Notifications](#email-notifications)
+- [Rate Limiting & Staggering](#rate-limiting--staggering)
 - [Tool Execution (MCP)](#tool-execution-mcp)
 - [External Data Sources](#external-data-sources)
 - [Agent Chaining](#agent-chaining)
@@ -41,6 +42,7 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - **Graceful shutdown** — SIGTERM/SIGINT drains in-flight jobs, stops the API server, and closes the database cleanly.
 - **Idempotency guard** — prevents duplicate runs if the process restarts mid-minute.
 - **Concurrency control** — configurable limit on simultaneous LLM calls.
+- **Rate-limit-aware staggering** — when multiple agents are due at the same tick, their launches are spread over time (configurable delay per agent) to stay within LLM API quota.
 
 ---
 
@@ -64,8 +66,10 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 │  • Idempotency guard │      │  PATCH  /agents/:id               │
 │  • Semaphore for     │      │  DELETE /agents/:id               │
 │    concurrency       │      │  GET    /agents/:id/executions    │
-│  • drain() for       │      │  GET    /status                   │
-│    graceful shutdown │      └──────────────┬────────────────────┘
+│  • Stagger delay for │      │  GET    /status                   │
+│    rate limiting     │      └──────────────┬────────────────────┘
+│  • drain() for       │                     │
+│    graceful shutdown │                     │
 └──────────┬───────────┘                     │
            │                                 │
            ▼                                 ▼
@@ -102,7 +106,7 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 | Component | Responsibility |
 |---|---|
 | `index.ts` | Boot sequence, health logging, graceful shutdown |
-| `scheduler.ts` | Minute-aligned cron tick, idempotency guard, concurrency semaphore, drain on shutdown, agent chaining |
+| `scheduler.ts` | Minute-aligned cron tick, idempotency guard, concurrency semaphore, stagger delay, drain on shutdown, agent chaining |
 | `apiServer.ts` | HTTP REST API — agent CRUD, execution history, status endpoint |
 | `runAgent.ts` | Wraps LLM call in retry/timeout logic, records `durationMs`, supports `previousOutput` for chaining |
 | `retryRunner.ts` | `withRetry`, `withTimeout`, `calculateBackoffDelay` (exponential + jitter) |
@@ -202,6 +206,8 @@ Copy `.env.example` to `.env` and set the values below.
 | `SMTP_PASS` | *(empty)* | | SMTP password |
 | `EMAIL_FROM` | `noreply@example.com` | | Sender address for notifications |
 | `PORT` | `3000` | | HTTP API port |
+| `MAX_CONCURRENT_LLM` | `5` | | Maximum simultaneous LLM calls across all agents |
+| `LLM_STAGGER_MS` | `500` | | Milliseconds between successive agent launches in the same tick (set to `0` to disable staggering) |
 | `NODE_ENV` | `development` | | `development` or `production` |
 | `LOG_LEVEL` | `info` | | Log level (`debug`, `info`, `warn`, `error`) |
 | `DB_PATH` | `agents.db` | | Path to the SQLite database file |
@@ -389,6 +395,43 @@ Set `emailRecipient` on an agent to receive execution results by email.
 Email delivery is retried independently of agent execution; a delivery failure does not affect the agent's execution status.
 
 Configure SMTP via the environment variables in [Configuration Reference](#configuration-reference). For local development, [Mailpit](https://mailpit.axllent.org/) captures emails without sending them.
+
+---
+
+## Rate Limiting & Staggering
+
+When multiple agents are scheduled for the same cron minute the scheduler does not launch them all simultaneously. Instead it staggers their starts by `LLM_STAGGER_MS` milliseconds between successive agents, spreading the burst of LLM API calls over time.
+
+### How it works
+
+- At each scheduler tick, agents that are due are sorted and assigned a launch index (0, 1, 2, …).
+- Agent 0 starts immediately; agent 1 starts after `LLM_STAGGER_MS` ms; agent 2 after `2 × LLM_STAGGER_MS` ms; and so on.
+- Once an agent starts, the existing `Semaphore` limits how many LLM calls can run concurrently (`MAX_CONCURRENT_LLM`).
+- Staggering and the concurrency semaphore work together: staggering spreads the *starts*, while the semaphore caps the *simultaneous in-flight* calls.
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_STAGGER_MS` | `500` | Milliseconds between successive agent starts in the same tick. Set to `0` to disable staggering. |
+| `MAX_CONCURRENT_LLM` | `5` | Maximum number of LLM calls that may run at the same time. |
+
+**Example** — if you have 4 agents all due at `0 9 * * *` and `LLM_STAGGER_MS=1000`:
+
+```
+t=0s    → Agent 1 starts
+t=1s    → Agent 2 starts
+t=2s    → Agent 3 starts
+t=3s    → Agent 4 starts
+```
+
+This prevents all 4 from hitting the Gemini API simultaneously and triggering a `429 Too Many Requests` error.
+
+### Tuning guidelines
+
+- **Low traffic (≤5 agents per tick):** the default `LLM_STAGGER_MS=500` is sufficient for most Gemini free-tier quotas.
+- **High traffic (>10 agents per tick):** increase `LLM_STAGGER_MS` (e.g. `2000`) and/or lower `MAX_CONCURRENT_LLM` to stay within your quota.
+- **Paid tier / no rate concerns:** set `LLM_STAGGER_MS=0` to disable staggering entirely.
 
 ---
 
