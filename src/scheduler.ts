@@ -10,6 +10,7 @@ import { runAgent } from "./runAgent";
 import type { GeminiClient } from "./geminiClient";
 import type { Config } from "./config";
 import { sendSuccess, sendFailure } from "./emailNotifier";
+import { structuredLog, logExecutionStart, logExecutionEnd } from "./logger";
 
 /**
  * Returns true when the given stored agent is due to run at the minute
@@ -76,9 +77,9 @@ export class Scheduler {
       this.tickTimer = setInterval(() => void this.tick(), TICK_INTERVAL_MS);
     }, msUntilNextMinute);
 
-    console.log(
-      `[scheduler] Started. First tick in ${Math.round(msUntilNextMinute / 1000)}s.`
-    );
+    structuredLog("info", "scheduler", "Started", {
+      firstTickInMs: Math.round(msUntilNextMinute),
+    });
   }
 
   /** Stop the scheduler and cancel any pending timers. */
@@ -91,7 +92,7 @@ export class Scheduler {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
     }
-    console.log("[scheduler] Stopped.");
+    structuredLog("info", "scheduler", "Stopped");
   }
 
   /**
@@ -103,7 +104,9 @@ export class Scheduler {
     try {
       agents = await listAgents(this.db);
     } catch (err: unknown) {
-      console.error("[scheduler] Failed to load agents:", err);
+      structuredLog("error", "scheduler", "Failed to load agents", {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return;
     }
 
@@ -111,7 +114,10 @@ export class Scheduler {
 
     if (due.length === 0) return;
 
-    console.log(`[scheduler] Tick at ${now.toISOString()}: ${due.length} agent(s) due.`);
+    structuredLog("info", "scheduler", "Tick: agents due", {
+      tickAt: now.toISOString(),
+      agentCount: due.length,
+    });
 
     await Promise.allSettled(due.map((agent) => this.runAndRecord(agent)));
   }
@@ -129,6 +135,9 @@ export class Scheduler {
       emailRecipient: storedAgent.emailRecipient,
     };
 
+    const startTime = new Date();
+    logExecutionStart("scheduler", storedAgent.name, startTime);
+
     try {
       const result = await runAgent(agentDef, this.client);
 
@@ -137,8 +146,13 @@ export class Scheduler {
       });
       await insertExecution(this.db, storedAgent.id, result);
 
-      console.log(
-        `[scheduler] Agent "${storedAgent.name}" finished with status: ${result.status}`
+      logExecutionEnd(
+        "scheduler",
+        storedAgent.name,
+        startTime,
+        result.status,
+        result.attempts ?? 1,
+        result.status === "success" ? result.response : result.error
       );
 
       if (this.config) {
@@ -146,10 +160,10 @@ export class Scheduler {
         await notifyFn(this.config, agentDef, result);
       }
     } catch (err: unknown) {
-      console.error(
-        `[scheduler] Unexpected error running agent "${storedAgent.name}":`,
-        err
-      );
+      structuredLog("error", "scheduler", "Unexpected error running agent", {
+        agentName: storedAgent.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

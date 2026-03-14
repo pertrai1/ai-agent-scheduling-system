@@ -124,22 +124,22 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 8: Observability + Health (Step 7)
 
-- [ ] Add structured logger for execution lifecycle events.
-- [ ] Log fields: agent name, start time, duration, status, retries, summary/error.
-- [ ] Implement response/error truncation helper for logs.
-- [ ] Enforce rolling execution history cap (last 100 per agent).
-- [ ] Implement aggregate metrics calculator (count, success rate, avg duration).
-- [ ] Implement unhealthy detector (last 3 consecutive failures).
-- [ ] Implement status endpoint/command with:
-- [ ] Registered agent count.
-- [ ] Enabled agent count.
-- [ ] Upcoming scheduled runs.
-- [ ] Aggregate execution metrics.
-- [ ] Unhealthy agents list.
-- [ ] Add test: status reflects registered/enabled counts.
-- [ ] Add test: metrics update after multiple runs.
-- [ ] Add test: upcoming runs are accurate.
-- [ ] Add test: 3 consecutive failures marks agent unhealthy.
+- [x] Add structured logger for execution lifecycle events.
+- [x] Log fields: agent name, start time, duration, status, retries, summary/error.
+- [x] Implement response/error truncation helper for logs.
+- [x] Enforce rolling execution history cap (last 100 per agent).
+- [x] Implement aggregate metrics calculator (count, success rate, avg duration).
+- [x] Implement unhealthy detector (last 3 consecutive failures).
+- [x] Implement status endpoint/command with:
+- [x] Registered agent count.
+- [x] Enabled agent count.
+- [x] Upcoming scheduled runs.
+- [x] Aggregate execution metrics.
+- [x] Unhealthy agents list.
+- [x] Add test: status reflects registered/enabled counts.
+- [x] Add test: metrics update after multiple runs.
+- [x] Add test: upcoming runs are accurate.
+- [x] Add test: 3 consecutive failures marks agent unhealthy.
 
 ## Phase 9: Hardening + Delivery
 

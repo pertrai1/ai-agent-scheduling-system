@@ -8,6 +8,7 @@ export async function runAgent(
   client: GeminiClient
 ): Promise<ExecutionResult> {
   const ranAt = new Date();
+  const startMs = Date.now();
   const prompt = buildPrompt(agent);
 
   const timeoutMs = agent.timeoutMs ?? DEFAULT_RETRY_OPTIONS.timeoutMs;
@@ -25,6 +26,7 @@ export async function runAgent(
       status: "success",
       response,
       attempts,
+      durationMs: Date.now() - startMs,
     };
   } catch (err: unknown) {
     const error =
@@ -39,6 +41,7 @@ export async function runAgent(
       status: "failure",
       error,
       attempts,
+      durationMs: Date.now() - startMs,
     };
   }
 }

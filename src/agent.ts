@@ -21,6 +21,7 @@ export const ExecutionResultSchema = z.object({
   response: z.string().optional(),
   error: z.string().optional(),
   attempts: z.number().int().min(1).optional(),
+  durationMs: z.number().int().min(0).optional(),
 });
 
 export type ExecutionResult = z.infer<typeof ExecutionResultSchema>;
