@@ -65,6 +65,24 @@ export class Semaphore {
 /** Default maximum number of concurrent LLM calls. */
 export const DEFAULT_MAX_CONCURRENT_LLM = 5;
 
+/**
+ * Default stagger delay between successive agent launches (milliseconds).
+ * Spreading starts over time reduces burst pressure on the LLM API quota.
+ */
+export const DEFAULT_STAGGER_MS = 500;
+
+// ---------------------------------------------------------------------------
+// Stagger helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a Promise that resolves after `ms` milliseconds.
+ * Used to stagger agent launches so they do not all hit the LLM API at once.
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ---------------------------------------------------------------------------
 // Idempotency helpers
 // ---------------------------------------------------------------------------
@@ -135,6 +153,8 @@ export class Scheduler {
   private inFlight: Set<Promise<void>> = new Set();
   /** Limits concurrent LLM calls. */
   private semaphore: Semaphore;
+  /** Milliseconds to wait between successive staggered agent launches. */
+  private staggerMs: number;
 
   /**
    * @param db             SQLite database connection.
@@ -144,18 +164,24 @@ export class Scheduler {
    *                       (useful in tests or environments without SMTP).
    * @param maxConcurrent  Maximum number of concurrent LLM calls (default 5).
    * @param toolRegistry   Optional registry of tools available to agents.
+   * @param staggerMs      Milliseconds to wait between successive agent launches
+   *                       within a single tick.  Staggering spreads API calls
+   *                       over time to avoid burst rate-limit errors.  Set to 0
+   *                       to disable staggering (default: 500).
    */
   constructor(
     db: sqlite3.Database,
     client: GeminiClient,
     config?: Config,
     maxConcurrent = DEFAULT_MAX_CONCURRENT_LLM,
-    toolRegistry?: ToolRegistry
+    toolRegistry?: ToolRegistry,
+    staggerMs = DEFAULT_STAGGER_MS
   ) {
     this.db = db;
     this.client = client;
     this.config = config;
     this.toolRegistry = toolRegistry;
+    this.staggerMs = staggerMs;
     this.semaphore = new Semaphore(maxConcurrent);
   }
 
@@ -240,9 +266,24 @@ export class Scheduler {
     structuredLog("info", "scheduler", "Tick: agents due", {
       tickAt: now.toISOString(),
       agentCount: due.length,
+      staggerMs: this.staggerMs,
     });
 
-    await Promise.allSettled(due.map((agent) => this.scheduleRun(agent, now)));
+    // Stagger launches so multiple agents that are due at the same tick do not
+    // all hit the LLM API simultaneously.  Agent[i] starts after i × staggerMs.
+    // All scheduleRun promises are still collected so Promise.allSettled can
+    // await their completion; the stagger only delays when each *starts*.
+    await Promise.allSettled(
+      due.map((agent, index) => {
+        const delayMs = index * this.staggerMs;
+        if (delayMs === 0) {
+          return this.scheduleRun(agent, now);
+        }
+        // Return a promise that waits for the stagger delay before launching.
+        const staggered = sleep(delayMs).then(() => this.scheduleRun(agent, now));
+        return staggered;
+      })
+    );
   }
 
   /**
