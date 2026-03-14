@@ -202,12 +202,14 @@ describe("Scheduler.tick", () => {
       taskDescription: "This will fail",
       cronExpression: "* * * * *",
       enabled: true,
+      maxRetries: 0,
     });
     await insertAgent(db, {
       name: "Succeeding Agent",
       taskDescription: "This will succeed",
       cronExpression: "* * * * *",
       enabled: true,
+      maxRetries: 0,
     });
 
     const scheduler = new Scheduler(db, failClient);

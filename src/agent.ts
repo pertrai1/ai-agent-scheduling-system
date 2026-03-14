@@ -6,6 +6,9 @@ export const AgentSchema = z.object({
   systemPrompt: z.string().optional(),
   cronExpression: z.string().optional(),
   enabled: z.boolean().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  maxRetries: z.number().int().min(0).optional(),
+  backoffBaseMs: z.number().int().positive().optional(),
 });
 
 export type Agent = z.infer<typeof AgentSchema>;
@@ -16,6 +19,7 @@ export const ExecutionResultSchema = z.object({
   status: z.enum(["success", "failure"]),
   response: z.string().optional(),
   error: z.string().optional(),
+  attempts: z.number().int().min(1).optional(),
 });
 
 export type ExecutionResult = z.infer<typeof ExecutionResultSchema>;

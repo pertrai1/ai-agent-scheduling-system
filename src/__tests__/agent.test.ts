@@ -173,7 +173,7 @@ describe("runAgent", () => {
       throw new Error("Service unavailable");
     });
 
-    const result = await runAgent(baseAgent, client);
+    const result = await runAgent({ ...baseAgent, maxRetries: 0 }, client);
 
     expect(result.agentName).toBe("Test Agent");
     expect(result.status).toBe("failure");
@@ -188,7 +188,7 @@ describe("runAgent", () => {
       throw "string error";
     });
 
-    const result = await runAgent(baseAgent, client);
+    const result = await runAgent({ ...baseAgent, maxRetries: 0 }, client);
 
     expect(result.status).toBe("failure");
     expect(result.error).toBe("string error");

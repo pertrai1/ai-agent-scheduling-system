@@ -10,6 +10,9 @@ const CREATE_AGENTS_TABLE = `
     cronExpression TEXT,
     enabled INTEGER NOT NULL DEFAULT 0,
     lastRunAt TEXT,
+    timeoutMs INTEGER NOT NULL DEFAULT 60000,
+    maxRetries INTEGER NOT NULL DEFAULT 3,
+    backoffBaseMs INTEGER NOT NULL DEFAULT 1000,
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )
@@ -24,6 +27,7 @@ const CREATE_EXECUTIONS_TABLE = `
     status TEXT NOT NULL CHECK(status IN ('success', 'failure')),
     response TEXT,
     error TEXT,
+    attempts INTEGER,
     FOREIGN KEY (agentId) REFERENCES agents(id) ON DELETE CASCADE
   )
 `;
@@ -54,6 +58,10 @@ export async function runMigrations(db: sqlite3.Database): Promise<void> {
   await addColumnIfMissing(db, "agents", "cronExpression", "TEXT");
   await addColumnIfMissing(db, "agents", "enabled", "INTEGER DEFAULT 0");
   await addColumnIfMissing(db, "agents", "lastRunAt", "TEXT");
+  await addColumnIfMissing(db, "agents", "timeoutMs", "INTEGER NOT NULL DEFAULT 60000");
+  await addColumnIfMissing(db, "agents", "maxRetries", "INTEGER NOT NULL DEFAULT 3");
+  await addColumnIfMissing(db, "agents", "backoffBaseMs", "INTEGER NOT NULL DEFAULT 1000");
+  await addColumnIfMissing(db, "executions", "attempts", "INTEGER");
 
   console.log("[migrations] Migrations completed successfully.");
 }
