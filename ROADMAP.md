@@ -43,35 +43,35 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 3: Cron Scheduling Engine (Step 2)
 
-- [ ] Extend agent schema with `cronExpression` and `enabled` flag.
-- [ ] Add cron expression validator utility.
-- [ ] Implement scheduler tick loop (minute-level check).
-- [ ] Implement `isAgentDueNow(agent, now)` function.
-- [ ] Implement concurrent execution for multiple due agents.
-- [ ] Ensure one agent failure does not block other agent runs.
-- [ ] Add last-run tracking update after each execution.
-- [ ] Add startup behavior to load enabled agents into scheduler.
-- [ ] Add test: `* * * * *` runs once per minute.
-- [ ] Add test: two agents due same minute both execute.
-- [ ] Add test: disabled agent does not execute.
-- [ ] Add test: re-enabled agent resumes execution.
-- [ ] Add test: `*/5 * * * *` timing logic is correct.
+- [x] Extend agent schema with `cronExpression` and `enabled` flag.
+- [x] Add cron expression validator utility.
+- [x] Implement scheduler tick loop (minute-level check).
+- [x] Implement `isAgentDueNow(agent, now)` function.
+- [x] Implement concurrent execution for multiple due agents.
+- [x] Ensure one agent failure does not block other agent runs.
+- [x] Add last-run tracking update after each execution.
+- [x] Add startup behavior to load enabled agents into scheduler.
+- [x] Add test: `* * * * *` runs once per minute.
+- [x] Add test: two agents due same minute both execute.
+- [x] Add test: disabled agent does not execute.
+- [x] Add test: re-enabled agent resumes execution.
+- [x] Add test: `*/5 * * * *` timing logic is correct.
 
 ## Phase 4: Natural Language Scheduling (Step 3)
 
-- [ ] Create parser interface: natural language input -> cron output.
-- [ ] Implement NL parsing strategy (LLM or library-backed).
-- [ ] Add strict post-parse cron validation.
-- [ ] Add human-readable schedule description generator.
-- [ ] Add parse response shape: `cron`, `description`, `confidence/notes`.
-- [ ] Return explicit parse error for ambiguous or unparseable input.
-- [ ] Add confirmation flow to show interpreted cron before save.
-- [ ] Add test: "every day at 7am" -> `0 7 * * *`.
-- [ ] Add test: "every weekday at 9am" -> `0 9 * * 1-5`.
-- [ ] Add test: "every Monday at 8am" -> `0 8 * * 1`.
-- [ ] Add test: "every 3 hours" -> `0 */3 * * *`.
-- [ ] Add test: "twice a day" resolves to valid expected schedule.
-- [ ] Add test: ambiguous text returns clear actionable error.
+- [x] Create parser interface: natural language input -> cron output.
+- [x] Implement NL parsing strategy (LLM or library-backed).
+- [x] Add strict post-parse cron validation.
+- [x] Add human-readable schedule description generator.
+- [x] Add parse response shape: `cron`, `description`, `confidence/notes`.
+- [x] Return explicit parse error for ambiguous or unparseable input.
+- [x] Add confirmation flow to show interpreted cron before save.
+- [x] Add test: "every day at 7am" -> `0 7 * * *`.
+- [x] Add test: "every weekday at 9am" -> `0 9 * * 1-5`.
+- [x] Add test: "every Monday at 8am" -> `0 8 * * 1`.
+- [x] Add test: "every 3 hours" -> `0 */3 * * *`.
+- [x] Add test: "twice a day" resolves to valid expected schedule.
+- [x] Add test: ambiguous text returns clear actionable error.
 
 ## Phase 5: Resilience (Timeout + Retry) (Step 4)
 
@@ -164,5 +164,6 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 - [x] Complete Phases 0-1 first.
 - [x] Complete Phase 2 before fully implementing Phases 3-8.
-- [ ] Deliver Phases 3-8 in order, validating each with tests.
+- [x] Deliver Phases 3-4 in order, validating each with tests.
+- [ ] Deliver Phases 5-8 in order, validating each with tests.
 - [ ] Reserve Phases 9-10 for stabilization and enhancements.
