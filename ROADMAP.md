@@ -156,7 +156,7 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 - [x] Add tool/skill execution support (MCP integration).
 - [x] Add agent chaining (output of one agent as input to another).
-- [ ] Add external data fetch modules (RSS/API/web sources).
+- [x] Add external data fetch modules (RSS/API/web sources).
 - [ ] Add LLM quota/rate-limit-aware scheduler staggering.
 - [ ] Build optional web dashboard for agent status and timelines.
 

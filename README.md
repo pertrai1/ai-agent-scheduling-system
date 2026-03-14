@@ -20,6 +20,7 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - [Resilience (Timeout & Retry)](#resilience-timeout--retry)
 - [Email Notifications](#email-notifications)
 - [Tool Execution (MCP)](#tool-execution-mcp)
+- [External Data Sources](#external-data-sources)
 - [Agent Chaining](#agent-chaining)
 - [Development](#development)
 
@@ -30,7 +31,8 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - **Cron scheduling** — runs agents on any five-field cron expression.
 - **Natural language scheduling** — describe schedules in plain English ("every weekday at 9am") and the system converts them via the LLM.
 - **LLM integration** — uses Google Gemini to execute each agent's task.
-- **Tool/skill execution** — agents can call built-in tools (`current_time`, `http_get`) via Gemini's function-calling API.
+- **Tool/skill execution** — agents can call built-in tools (`current_time`, `http_get`, `fetch_rss`, `fetch_json`, `fetch_webpage_text`) via Gemini's function-calling API.
+- **External data sources** — built-in tools for fetching RSS/Atom feeds, JSON APIs, and web page text let agents pull live data before processing it with the LLM.
 - **Agent chaining** — the output of one agent can be fed as input to another, enabling multi-step pipelines.
 - **Resilience** — configurable per-agent timeout, retry count, and exponential back-off with jitter.
 - **Email notifications** — sends success and failure emails independently of agent execution.
@@ -113,7 +115,8 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 | `logger.ts` | `structuredLog` (JSON), `truncate`, execution lifecycle helpers |
 | `errors.ts` | `AppError` hierarchy, `errorToHttpStatus`, `errorToMessage` |
 | `toolRegistry.ts` | `ToolRegistry` class — register, execute, and introspect tool definitions |
-| `builtinTools.ts` | Built-in tools: `current_time`, `http_get`; `createDefaultToolRegistry()` factory |
+| `builtinTools.ts` | Built-in tools: `current_time`, `http_get`, `fetch_rss`, `fetch_json`, `fetch_webpage_text`; `createDefaultToolRegistry()` factory |
+| `dataFetcher.ts` | External data fetch helpers — RSS/Atom feed parsing, JSON API fetching, web page text extraction |
 | `database.ts` | Promise-based SQLite helpers |
 | `migrations.ts` | Idempotent `CREATE TABLE` and `ALTER TABLE` migrations |
 | `agentRepository.ts` | CRUD for `agents` and `executions`, null→undefined normalization |
@@ -399,6 +402,9 @@ Agents can call built-in tools during LLM execution via Gemini's function-callin
 |---|---|
 | `current_time` | Returns the current date and time in ISO 8601 format (UTC) |
 | `http_get` | Performs an HTTP GET to a URL and returns the response body (truncated to 10,000 characters) |
+| `fetch_rss` | Fetches an RSS 2.0 or Atom 1.0 feed and returns parsed items as JSON |
+| `fetch_json` | Fetches a JSON API endpoint with optional headers and returns formatted JSON (truncated to 10,000 characters) |
+| `fetch_webpage_text` | Fetches a web page and returns stripped plain text (truncated to 10,000 characters) |
 
 ### Enabling tools on an agent
 
@@ -455,6 +461,117 @@ Pass the registry to `Scheduler` as the fifth constructor argument:
 ```typescript
 const scheduler = new Scheduler(db, geminiClient, config, maxConcurrent, registry);
 ```
+
+---
+
+## External Data Sources
+
+Agents can pull live data from external sources before the LLM processes it, using three dedicated built-in tools. This turns agents from simple prompt runners into genuine automation tools that act on up-to-date information.
+
+### `fetch_rss` — RSS and Atom feeds
+
+Fetches and parses an RSS 2.0 or Atom 1.0 feed, returning a structured JSON object containing the feed title, description, link, and up to `max_items` entries (default: 20). Each entry includes `title`, `link`, `description`, `pubDate`, and `guid`.
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "Tech News Digest",
+  "taskDescription": "Use fetch_rss to read https://hnrss.org/frontpage and summarise the top 5 technology stories.",
+  "tools": ["fetch_rss"],
+  "cronExpression": "0 8 * * 1-5",
+  "enabled": true,
+  "emailRecipient": "user@example.com"
+}
+```
+
+Tool parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | ✅ | URL of the RSS or Atom feed |
+| `max_items` | number | | Maximum number of feed items to return (default: 20) |
+
+### `fetch_json` — JSON APIs
+
+Fetches any JSON API endpoint and returns the response as a formatted JSON string (truncated to 10,000 characters). Supports optional HTTP request headers for authenticated APIs.
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "GitHub Release Watch",
+  "taskDescription": "Use fetch_json to call https://api.github.com/repos/nodejs/node/releases/latest and report the latest Node.js release.",
+  "tools": ["fetch_json"],
+  "cronExpression": "0 9 * * 1",
+  "enabled": true
+}
+```
+
+Tool parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | ✅ | The API endpoint URL |
+| `headers` | string | | JSON object string of HTTP headers, e.g. `'{"Authorization":"Bearer token"}'` |
+
+### `fetch_webpage_text` — Web page text
+
+Fetches a web page and extracts readable plain text by stripping all HTML tags, scripts, and styles (truncated to 10,000 characters). Useful for scraping documentation, release notes, or status pages.
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "Status Page Monitor",
+  "taskDescription": "Use fetch_webpage_text to read https://www.githubstatus.com and report any active incidents.",
+  "tools": ["fetch_webpage_text", "current_time"],
+  "cronExpression": "0 */4 * * *",
+  "enabled": true,
+  "emailRecipient": "ops@example.com"
+}
+```
+
+Tool parameters:
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | ✅ | The URL of the web page to fetch |
+
+### Combining external data tools with chaining
+
+External data tools work well at the head of an agent chain. A data-gathering agent fetches and formats raw content; a downstream summarisation agent receives the output as context and produces the final report:
+
+```http
+POST /agents   (agent 1)
+{
+  "name": "Hacker News Fetcher",
+  "taskDescription": "Use fetch_rss to read https://hnrss.org/frontpage with max_items 10 and return the raw feed items.",
+  "tools": ["fetch_rss"],
+  "cronExpression": "0 7 * * *",
+  "enabled": true,
+  "chainTo": "Hacker News Summariser"
+}
+
+POST /agents   (agent 2)
+{
+  "name": "Hacker News Summariser",
+  "taskDescription": "Write a concise morning briefing from the feed items above.",
+  "emailRecipient": "user@example.com"
+}
+```
+
+### Implementation details
+
+The external data fetch helpers live in `src/dataFetcher.ts` and are exposed as tools registered in `createDefaultToolRegistry()` (`src/builtinTools.ts`). All three tools:
+
+- Use the native `fetch` API (Node.js ≥ 18).
+- Throw descriptive errors on non-OK HTTP responses.
+- Truncate large responses to avoid overwhelming the LLM context window.
+- Are fully unit-tested with mocked network calls (`src/__tests__/dataFetcher.test.ts`).
 
 ---
 
@@ -539,10 +656,11 @@ src/
 ├── agent.ts           # Zod schemas: Agent, ExecutionResult
 ├── agentRepository.ts # SQLite CRUD for agents + executions
 ├── apiServer.ts       # HTTP REST API
-├── builtinTools.ts    # Built-in tools: current_time, http_get
+├── builtinTools.ts    # Built-in tools: current_time, http_get, fetch_rss, fetch_json, fetch_webpage_text
 ├── config.ts          # Zod-validated config loader
 ├── cronValidator.ts   # Cron expression validator
 ├── database.ts        # SQLite promise helpers
+├── dataFetcher.ts     # External data fetch: RSS/Atom, JSON API, web page text
 ├── emailNotifier.ts   # SMTP email sender
 ├── errors.ts          # Centralized error types
 ├── geminiClient.ts    # Google Gemini client wrapper (text + tools)
