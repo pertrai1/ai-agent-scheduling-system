@@ -4,14 +4,14 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 0: Project Setup (Step Zero)
 
-- [ ] Initialize Node.js + TypeScript project (`tsconfig`, `src` folder).
-- [ ] Add core dependencies: `zod`, `dotenv`, `sqlite3` (or chosen SQLite client), cron parser/scheduler library.
-- [ ] Add dev dependencies: `typescript`, `tsx`, `vitest` (or Jest), `@types/node`, lint/format tools.
-- [ ] Create environment file template (`.env.example`) with Gemini and email placeholders.
-- [ ] Add `npm` scripts for `dev`, `build`, `start`, `test`, and `lint`.
-- [ ] Create a minimal app entrypoint that starts and logs service health.
-- [ ] Add a config module to load and validate env vars with Zod.
-- [ ] Verify project boots with no runtime/config validation errors.
+- [x] Initialize Node.js + TypeScript project (`tsconfig`, `src` folder).
+- [x] Add core dependencies: `zod`, `dotenv`, `sqlite3` (or chosen SQLite client), cron parser/scheduler library.
+- [x] Add dev dependencies: `typescript`, `tsx`, `vitest` (or Jest), `@types/node`, lint/format tools.
+- [x] Create environment file template (`.env.example`) with Gemini and email placeholders.
+- [x] Add `npm` scripts for `dev`, `build`, `start`, `test`, and `lint`.
+- [x] Create a minimal app entrypoint that starts and logs service health.
+- [x] Add a config module to load and validate env vars with Zod.
+- [x] Verify project boots with no runtime/config validation errors.
 
 ## Phase 1: Core Agent Execution (Step 1)
 
