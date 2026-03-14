@@ -1,5 +1,5 @@
 import type sqlite3 from "sqlite3";
-import { dbRun } from "./database";
+import { dbRun, dbAll } from "./database";
 
 const CREATE_AGENTS_TABLE = `
   CREATE TABLE IF NOT EXISTS agents (
@@ -7,6 +7,9 @@ const CREATE_AGENTS_TABLE = `
     name TEXT NOT NULL UNIQUE,
     taskDescription TEXT NOT NULL,
     systemPrompt TEXT,
+    cronExpression TEXT,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    lastRunAt TEXT,
     createdAt TEXT NOT NULL,
     updatedAt TEXT NOT NULL
   )
@@ -25,9 +28,32 @@ const CREATE_EXECUTIONS_TABLE = `
   )
 `;
 
+async function getTableColumns(db: sqlite3.Database, table: string): Promise<string[]> {
+  const rows = await dbAll<{ name: string }>(db, `PRAGMA table_info(${table})`);
+  return rows.map((r) => r.name);
+}
+
+async function addColumnIfMissing(
+  db: sqlite3.Database,
+  table: string,
+  column: string,
+  definition: string
+): Promise<void> {
+  const columns = await getTableColumns(db, table);
+  if (!columns.includes(column)) {
+    await dbRun(db, `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export async function runMigrations(db: sqlite3.Database): Promise<void> {
   await dbRun(db, "PRAGMA foreign_keys = ON");
   await dbRun(db, CREATE_AGENTS_TABLE);
   await dbRun(db, CREATE_EXECUTIONS_TABLE);
+
+  // Idempotent column additions for existing databases
+  await addColumnIfMissing(db, "agents", "cronExpression", "TEXT");
+  await addColumnIfMissing(db, "agents", "enabled", "INTEGER DEFAULT 0");
+  await addColumnIfMissing(db, "agents", "lastRunAt", "TEXT");
+
   console.log("[migrations] Migrations completed successfully.");
 }

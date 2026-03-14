@@ -12,6 +12,9 @@ export interface StoredAgent {
   name: string;
   taskDescription: string;
   systemPrompt?: string;
+  cronExpression?: string;
+  enabled: boolean;
+  lastRunAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,7 +33,12 @@ export interface StoredExecution {
 // Row normalization helpers (SQLite returns null for absent columns)
 // ---------------------------------------------------------------------------
 
-type RawAgent = Omit<StoredAgent, "systemPrompt"> & { systemPrompt: string | null };
+type RawAgent = Omit<StoredAgent, "systemPrompt" | "cronExpression" | "lastRunAt" | "enabled"> & {
+  systemPrompt: string | null;
+  cronExpression: string | null;
+  enabled: number;
+  lastRunAt: string | null;
+};
 type RawExecution = Omit<StoredExecution, "response" | "error"> & {
   response: string | null;
   error: string | null;
@@ -40,6 +48,9 @@ function normalizeAgent(row: RawAgent): StoredAgent {
   return {
     ...row,
     systemPrompt: row.systemPrompt ?? undefined,
+    cronExpression: row.cronExpression ?? undefined,
+    enabled: !!row.enabled,
+    lastRunAt: row.lastRunAt ?? undefined,
   };
 }
 
@@ -62,9 +73,17 @@ export async function insertAgent(
   const now = new Date().toISOString();
   const { lastID } = await dbRun(
     db,
-    `INSERT INTO agents (name, taskDescription, systemPrompt, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?)`,
-    [agent.name, agent.taskDescription, agent.systemPrompt ?? null, now, now]
+    `INSERT INTO agents (name, taskDescription, systemPrompt, cronExpression, enabled, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      agent.name,
+      agent.taskDescription,
+      agent.systemPrompt ?? null,
+      agent.cronExpression ?? null,
+      agent.enabled ? 1 : 0,
+      now,
+      now,
+    ]
   );
   const stored = await fetchAgentById(db, lastID);
   if (!stored) throw new Error(`Failed to retrieve agent after insert (id=${lastID})`);
@@ -94,10 +113,14 @@ export async function listAgents(
   return rows.map(normalizeAgent);
 }
 
+export type AgentUpdates = Partial<
+  Pick<Agent, "name" | "taskDescription" | "systemPrompt" | "cronExpression" | "enabled">
+> & { lastRunAt?: string };
+
 export async function updateAgent(
   db: sqlite3.Database,
   id: number,
-  updates: Partial<Pick<Agent, "name" | "taskDescription" | "systemPrompt">>
+  updates: AgentUpdates
 ): Promise<StoredAgent | undefined> {
   const existing = await fetchAgentById(db, id);
   if (!existing) return undefined;
@@ -107,12 +130,20 @@ export async function updateAgent(
   const taskDescription = updates.taskDescription ?? existing.taskDescription;
   const systemPrompt =
     "systemPrompt" in updates ? (updates.systemPrompt ?? null) : existing.systemPrompt ?? null;
+  const cronExpression =
+    "cronExpression" in updates ? (updates.cronExpression ?? null) : existing.cronExpression ?? null;
+  const enabled =
+    "enabled" in updates ? (updates.enabled ? 1 : 0) : existing.enabled ? 1 : 0;
+  const lastRunAt =
+    "lastRunAt" in updates ? (updates.lastRunAt ?? null) : existing.lastRunAt ?? null;
 
   await dbRun(
     db,
-    `UPDATE agents SET name = ?, taskDescription = ?, systemPrompt = ?, updatedAt = ?
+    `UPDATE agents
+     SET name = ?, taskDescription = ?, systemPrompt = ?, cronExpression = ?,
+         enabled = ?, lastRunAt = ?, updatedAt = ?
      WHERE id = ?`,
-    [name, taskDescription, systemPrompt, updatedAt, id]
+    [name, taskDescription, systemPrompt, cronExpression, enabled, lastRunAt, updatedAt, id]
   );
   return fetchAgentById(db, id);
 }

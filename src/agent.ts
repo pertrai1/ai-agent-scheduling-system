@@ -4,6 +4,8 @@ export const AgentSchema = z.object({
   name: z.string().min(1, "Agent name is required"),
   taskDescription: z.string().min(1, "Task description is required"),
   systemPrompt: z.string().optional(),
+  cronExpression: z.string().optional(),
+  enabled: z.boolean().optional(),
 });
 
 export type Agent = z.infer<typeof AgentSchema>;
