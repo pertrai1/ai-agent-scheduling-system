@@ -13,6 +13,8 @@ const configSchema = z.object({
   SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().email().default("noreply@example.com"),
 
+  PORT: z.coerce.number().int().positive().default(3000),
+
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),

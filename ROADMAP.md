@@ -106,21 +106,21 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 7: Management Interface (Step 6)
 
-- [ ] Choose interface mode (REST API, CLI, or both).
-- [ ] Implement create-agent endpoint/command.
-- [ ] Implement list-agents endpoint/command with status fields.
-- [ ] Implement get-agent-details endpoint/command.
-- [ ] Implement update-agent endpoint/command.
-- [ ] Implement delete-agent endpoint/command.
-- [ ] Support schedule input as cron or natural language.
-- [ ] Validate timeout/retry/email fields on create/update.
-- [ ] Persist all config updates in SQLite.
-- [ ] Wire scheduler to pick up create/update/delete changes without restart.
-- [ ] Implement execution history endpoint/command per agent.
-- [ ] Add test: create agent then verify scheduled execution starts.
-- [ ] Add test: edit schedule and verify new timing takes effect.
-- [ ] Add test: delete agent stops future runs.
-- [ ] Add test: restart service preserves agents and execution history.
+- [x] Choose interface mode (REST API, CLI, or both).
+- [x] Implement create-agent endpoint/command.
+- [x] Implement list-agents endpoint/command with status fields.
+- [x] Implement get-agent-details endpoint/command.
+- [x] Implement update-agent endpoint/command.
+- [x] Implement delete-agent endpoint/command.
+- [x] Support schedule input as cron or natural language.
+- [x] Validate timeout/retry/email fields on create/update.
+- [x] Persist all config updates in SQLite.
+- [x] Wire scheduler to pick up create/update/delete changes without restart.
+- [x] Implement execution history endpoint/command per agent.
+- [x] Add test: create agent then verify scheduled execution starts.
+- [x] Add test: edit schedule and verify new timing takes effect.
+- [x] Add test: delete agent stops future runs.
+- [x] Add test: restart service preserves agents and execution history.
 
 ## Phase 8: Observability + Health (Step 7)
 
@@ -166,5 +166,5 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 - [x] Complete Phase 2 before fully implementing Phases 3-8.
 - [x] Deliver Phases 3-4 in order, validating each with tests.
 - [x] Deliver Phases 5-6 in order, validating each with tests.
-- [ ] Deliver Phases 7-8 in order, validating each with tests.
+- [x] Deliver Phases 7-8 in order, validating each with tests.
 - [ ] Reserve Phases 9-10 for stabilization and enhancements.
