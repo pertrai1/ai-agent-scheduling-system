@@ -4,6 +4,7 @@ import { runAgent } from "./runAgent";
 import type { Agent } from "./agent";
 import { openDatabase } from "./database";
 import { runMigrations } from "./migrations";
+import { Scheduler } from "./scheduler";
 
 const config = loadConfig();
 
@@ -45,4 +46,7 @@ void (async () => {
     console.error("[index] Migration failed:", err);
     process.exit(1);
   }
+
+  const scheduler = new Scheduler(db, geminiClient);
+  scheduler.start();
 })();
