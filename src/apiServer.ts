@@ -29,6 +29,7 @@ const CreateAgentBodySchema = z.object({
   maxRetries: z.number().int().min(0).optional(),
   backoffBaseMs: z.number().int().positive().optional(),
   emailRecipient: z.string().email("emailRecipient must be a valid email").optional(),
+  tools: z.array(z.string()).optional(),
 });
 
 const UpdateAgentBodySchema = z.object({
@@ -41,6 +42,7 @@ const UpdateAgentBodySchema = z.object({
   maxRetries: z.number().int().min(0).optional(),
   backoffBaseMs: z.number().int().positive().optional(),
   emailRecipient: z.string().email().optional(),
+  tools: z.array(z.string()).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -236,6 +238,7 @@ export class ApiServer {
         maxRetries: data.maxRetries,
         backoffBaseMs: data.backoffBaseMs,
         emailRecipient: data.emailRecipient,
+        tools: data.tools,
       });
       sendJson(res, 201, agent);
     } catch (err: unknown) {
