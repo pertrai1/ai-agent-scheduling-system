@@ -5,6 +5,7 @@ import type { Agent } from "./agent";
 import { openDatabase } from "./database";
 import { runMigrations } from "./migrations";
 import { Scheduler } from "./scheduler";
+import { ApiServer } from "./apiServer";
 
 const config = loadConfig();
 
@@ -49,4 +50,9 @@ void (async () => {
 
   const scheduler = new Scheduler(db, geminiClient, config);
   scheduler.start();
+
+  const port = config.PORT;
+  const apiServer = new ApiServer(db, geminiClient);
+  const boundPort = await apiServer.start(port);
+  console.log(`[index] Management API running on http://localhost:${boundPort}`);
 })();
