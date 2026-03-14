@@ -22,6 +22,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "cron-parser": "^5.2.0",
     "dotenv": "^16.4.7",
     "nodemailer": "^6.9.16",
