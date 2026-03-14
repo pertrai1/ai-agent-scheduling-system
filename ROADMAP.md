@@ -143,14 +143,14 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 
 ## Phase 9: Hardening + Delivery
 
-- [ ] Add centralized error types and error-to-status mapping.
-- [ ] Add graceful shutdown (stop scheduler, finish in-flight jobs, close DB).
-- [ ] Add idempotency guard to avoid duplicate run in same schedule window.
-- [ ] Add basic rate-limit/concurrency controls for LLM calls.
-- [ ] Add README usage docs for setup, run, and management commands.
-- [ ] Add architecture diagram and component responsibilities.
-- [ ] Add integration test scenario covering end-to-end scheduled run.
-- [ ] Add CI workflow for lint, typecheck, and tests.
+- [x] Add centralized error types and error-to-status mapping.
+- [x] Add graceful shutdown (stop scheduler, finish in-flight jobs, close DB).
+- [x] Add idempotency guard to avoid duplicate run in same schedule window.
+- [x] Add basic rate-limit/concurrency controls for LLM calls.
+- [x] Add README usage docs for setup, run, and management commands.
+- [x] Add architecture diagram and component responsibilities.
+- [x] Add integration test scenario covering end-to-end scheduled run.
+- [x] Add CI workflow for lint, typecheck, and tests.
 
 ## Phase 10: Stretch Goals (Going Further)
 
@@ -167,4 +167,4 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 - [x] Deliver Phases 3-4 in order, validating each with tests.
 - [x] Deliver Phases 5-6 in order, validating each with tests.
 - [x] Deliver Phases 7-8 in order, validating each with tests.
-- [ ] Reserve Phases 9-10 for stabilization and enhancements.
+- [x] Reserve Phases 9-10 for stabilization and enhancements.

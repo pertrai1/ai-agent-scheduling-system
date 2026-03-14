@@ -12,6 +12,86 @@ import type { Config } from "./config";
 import { sendSuccess, sendFailure } from "./emailNotifier";
 import { structuredLog, logExecutionStart, logExecutionEnd } from "./logger";
 
+// ---------------------------------------------------------------------------
+// Concurrency limiter (simple semaphore)
+// ---------------------------------------------------------------------------
+
+/**
+ * A simple counting semaphore that limits the number of concurrent async
+ * operations.  Callers `acquire()` a slot before starting work and
+ * `release()` when done.
+ */
+export class Semaphore {
+  private running = 0;
+  private queue: Array<() => void> = [];
+
+  constructor(private readonly maxConcurrent: number) {}
+
+  acquire(): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.running < this.maxConcurrent) {
+        this.running++;
+        resolve();
+      } else {
+        this.queue.push(() => {
+          this.running++;
+          resolve();
+        });
+      }
+    });
+  }
+
+  release(): void {
+    this.running--;
+    const next = this.queue.shift();
+    if (next) next();
+  }
+
+  /**
+   * Convenience wrapper: acquires the semaphore, runs `fn`, then releases.
+   */
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+}
+
+/** Default maximum number of concurrent LLM calls. */
+const DEFAULT_MAX_CONCURRENT_LLM = 5;
+
+// ---------------------------------------------------------------------------
+// Idempotency helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the ISO-8601 string for the minute boundary containing `now`
+ * (i.e. `now` with seconds and milliseconds set to zero).
+ * Used as the schedule-window key for idempotency checks.
+ */
+export function getMinuteBoundary(now: Date): string {
+  const floored = new Date(now);
+  floored.setSeconds(0, 0);
+  return floored.toISOString();
+}
+
+/**
+ * Returns true when the agent already ran within the minute window that
+ * contains `now`, based on its persisted `lastRunAt` timestamp.
+ * This prevents duplicate executions if the process restarts mid-minute.
+ */
+export function hasRunInCurrentWindow(agent: StoredAgent, now: Date): boolean {
+  if (!agent.lastRunAt) return false;
+  return agent.lastRunAt.startsWith(getMinuteBoundary(now).slice(0, 16));
+}
+
+// ---------------------------------------------------------------------------
+// Cron helpers
+// ---------------------------------------------------------------------------
+
 /**
  * Returns true when the given stored agent is due to run at the minute
  * containing `now`.  The check is performed by flooring `now` to the
@@ -48,18 +128,29 @@ export class Scheduler {
   private config: Config | undefined;
   private tickTimer: NodeJS.Timeout | null = null;
   private alignTimer: NodeJS.Timeout | null = null;
+  /** Tracks in-flight run promises so graceful shutdown can await them. */
+  private inFlight: Set<Promise<void>> = new Set();
+  /** Limits concurrent LLM calls. */
+  private semaphore: Semaphore;
 
   /**
-   * @param db     SQLite database connection.
-   * @param client Gemini LLM client.
-   * @param config Application config used for email notifications.
-   *               When omitted, email notifications are silently disabled
-   *               (useful in tests or environments without SMTP).
+   * @param db             SQLite database connection.
+   * @param client         Gemini LLM client.
+   * @param config         Application config used for email notifications.
+   *                       When omitted, email notifications are silently disabled
+   *                       (useful in tests or environments without SMTP).
+   * @param maxConcurrent  Maximum number of concurrent LLM calls (default 5).
    */
-  constructor(db: sqlite3.Database, client: GeminiClient, config?: Config) {
+  constructor(
+    db: sqlite3.Database,
+    client: GeminiClient,
+    config?: Config,
+    maxConcurrent = DEFAULT_MAX_CONCURRENT_LLM
+  ) {
     this.db = db;
     this.client = client;
     this.config = config;
+    this.semaphore = new Semaphore(maxConcurrent);
   }
 
   /**
@@ -96,8 +187,22 @@ export class Scheduler {
   }
 
   /**
+   * Wait for all currently in-flight agent runs to complete.
+   * Call this after `stop()` for a graceful shutdown.
+   */
+  async drain(): Promise<void> {
+    if (this.inFlight.size > 0) {
+      structuredLog("info", "scheduler", "Draining in-flight jobs", {
+        count: this.inFlight.size,
+      });
+      await Promise.allSettled([...this.inFlight]);
+    }
+  }
+
+  /**
    * Evaluate all enabled agents and run any that are due, concurrently.
    * One agent's failure does not prevent others from running.
+   * Idempotency: agents already run in the current minute window are skipped.
    */
   async tick(now: Date = new Date()): Promise<void> {
     let agents: StoredAgent[];
@@ -110,7 +215,19 @@ export class Scheduler {
       return;
     }
 
-    const due = agents.filter((a) => a.enabled && isAgentDueNow(a, now));
+    const due = agents.filter((a) => {
+      if (!a.enabled) return false;
+      if (!isAgentDueNow(a, now)) return false;
+      // Idempotency guard: skip if already ran in this minute window
+      if (hasRunInCurrentWindow(a, now)) {
+        structuredLog("info", "scheduler", "Skipping agent (already ran this window)", {
+          agentName: a.name,
+          window: getMinuteBoundary(now),
+        });
+        return false;
+      }
+      return true;
+    });
 
     if (due.length === 0) return;
 
@@ -119,10 +236,21 @@ export class Scheduler {
       agentCount: due.length,
     });
 
-    await Promise.allSettled(due.map((agent) => this.runAndRecord(agent)));
+    await Promise.allSettled(due.map((agent) => this.scheduleRun(agent, now)));
   }
 
-  private async runAndRecord(storedAgent: StoredAgent): Promise<void> {
+  /**
+   * Wraps `runAndRecord` in the concurrency semaphore and tracks the
+   * promise in `inFlight` so that `drain()` can await it.
+   */
+  private scheduleRun(storedAgent: StoredAgent, tickNow: Date): Promise<void> {
+    const promise = this.semaphore.run(() => this.runAndRecord(storedAgent, tickNow));
+    this.inFlight.add(promise);
+    void promise.finally(() => this.inFlight.delete(promise));
+    return promise;
+  }
+
+  private async runAndRecord(storedAgent: StoredAgent, tickNow: Date): Promise<void> {
     const agentDef = {
       name: storedAgent.name,
       taskDescription: storedAgent.taskDescription,
@@ -141,8 +269,14 @@ export class Scheduler {
     try {
       const result = await runAgent(agentDef, this.client);
 
+      // `lastRunAt` stores the scheduled tick time (the minute boundary that
+      // triggered this run), not the wall-clock completion time.  This lets
+      // the idempotency guard (`hasRunInCurrentWindow`) detect that the agent
+      // already ran in this schedule window if the process restarts mid-minute.
+      // The actual execution timestamp and duration are captured in the
+      // `executions` table via `insertExecution` below.
       await updateAgent(this.db, storedAgent.id, {
-        lastRunAt: result.ranAt.toISOString(),
+        lastRunAt: tickNow.toISOString(),
       });
       await insertExecution(this.db, storedAgent.id, result);
 
