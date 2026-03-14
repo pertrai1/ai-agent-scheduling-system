@@ -19,6 +19,8 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - [Scheduling](#scheduling)
 - [Resilience (Timeout & Retry)](#resilience-timeout--retry)
 - [Email Notifications](#email-notifications)
+- [Tool Execution (MCP)](#tool-execution-mcp)
+- [Agent Chaining](#agent-chaining)
 - [Development](#development)
 
 ---
@@ -28,6 +30,8 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 - **Cron scheduling** — runs agents on any five-field cron expression.
 - **Natural language scheduling** — describe schedules in plain English ("every weekday at 9am") and the system converts them via the LLM.
 - **LLM integration** — uses Google Gemini to execute each agent's task.
+- **Tool/skill execution** — agents can call built-in tools (`current_time`, `http_get`) via Gemini's function-calling API.
+- **Agent chaining** — the output of one agent can be fed as input to another, enabling multi-step pipelines.
 - **Resilience** — configurable per-agent timeout, retry count, and exponential back-off with jitter.
 - **Email notifications** — sends success and failure emails independently of agent execution.
 - **REST API** — full CRUD management of agents and execution history.
@@ -96,18 +100,20 @@ An AI-powered agent scheduling system that runs LLM-backed tasks automatically o
 | Component | Responsibility |
 |---|---|
 | `index.ts` | Boot sequence, health logging, graceful shutdown |
-| `scheduler.ts` | Minute-aligned cron tick, idempotency guard, concurrency semaphore, drain on shutdown |
+| `scheduler.ts` | Minute-aligned cron tick, idempotency guard, concurrency semaphore, drain on shutdown, agent chaining |
 | `apiServer.ts` | HTTP REST API — agent CRUD, execution history, status endpoint |
-| `runAgent.ts` | Wraps LLM call in retry/timeout logic, records `durationMs` |
+| `runAgent.ts` | Wraps LLM call in retry/timeout logic, records `durationMs`, supports `previousOutput` for chaining |
 | `retryRunner.ts` | `withRetry`, `withTimeout`, `calculateBackoffDelay` (exponential + jitter) |
-| `geminiClient.ts` | Thin wrapper around `@google/generative-ai` |
-| `promptBuilder.ts` | Merges `systemPrompt` and `taskDescription` into a single prompt |
+| `geminiClient.ts` | Thin wrapper around `@google/generative-ai` — supports plain text and multi-turn function calling |
+| `promptBuilder.ts` | Merges `systemPrompt`, `taskDescription`, and optional `previousOutput` into a single prompt |
 | `emailNotifier.ts` | SMTP email sending with independent retry and logging |
 | `nlScheduleParser.ts` | LLM-backed natural language → cron conversion with Zod validation |
 | `cronValidator.ts` | Validates five-field cron expressions using `cron-parser` |
 | `observability.ts` | Aggregate metrics, unhealthy detector, upcoming-run calculator, system status |
 | `logger.ts` | `structuredLog` (JSON), `truncate`, execution lifecycle helpers |
 | `errors.ts` | `AppError` hierarchy, `errorToHttpStatus`, `errorToMessage` |
+| `toolRegistry.ts` | `ToolRegistry` class — register, execute, and introspect tool definitions |
+| `builtinTools.ts` | Built-in tools: `current_time`, `http_get`; `createDefaultToolRegistry()` factory |
 | `database.ts` | Promise-based SQLite helpers |
 | `migrations.ts` | Idempotent `CREATE TABLE` and `ALTER TABLE` migrations |
 | `agentRepository.ts` | CRUD for `agents` and `executions`, null→undefined normalization |
@@ -228,7 +234,9 @@ Content-Type: application/json
   "emailRecipient": "user@example.com",
   "timeoutMs": 30000,
   "maxRetries": 3,
-  "backoffBaseMs": 1000
+  "backoffBaseMs": 1000,
+  "tools": ["http_get", "current_time"],
+  "chainTo": "Digest Sender"
 }
 ```
 
@@ -381,6 +389,128 @@ Configure SMTP via the environment variables in [Configuration Reference](#confi
 
 ---
 
+## Tool Execution (MCP)
+
+Agents can call built-in tools during LLM execution via Gemini's function-calling API (Model Context Protocol style). This allows an agent to fetch live data before generating its response.
+
+### Built-in tools
+
+| Tool | Description |
+|---|---|
+| `current_time` | Returns the current date and time in ISO 8601 format (UTC) |
+| `http_get` | Performs an HTTP GET to a URL and returns the response body (truncated to 10,000 characters) |
+
+### Enabling tools on an agent
+
+Set the `tools` field to an array of tool names when creating or updating an agent:
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "Dependency Watch",
+  "taskDescription": "Fetch https://api.example.com/releases and summarise new versions.",
+  "tools": ["http_get", "current_time"],
+  "cronExpression": "0 8 * * 1",
+  "enabled": true
+}
+```
+
+When the agent runs, the scheduler resolves the tool names against the registry and invokes `generateWithTools`, which drives a multi-turn Gemini function-calling loop (up to 10 rounds) until the model returns a final text response. Unrecognised tool names are skipped with a warning.
+
+### How it works
+
+1. The scheduler calls `runAgent` with the agent's `tools` list and a `ToolRegistry`.
+2. `runAgent` resolves the tool names to `ToolDefinition` objects (Zod-validated JSON Schema).
+3. `GeminiClient.generateWithTools` sends the definitions to the Gemini API.
+4. When the model emits a function call, the executor looks up and invokes the registered handler.
+5. The tool result is fed back to the model; this repeats until the model returns plain text.
+
+### Adding custom tools
+
+```typescript
+import { ToolRegistry } from "./toolRegistry";
+
+const registry = new ToolRegistry();
+registry.register(
+  {
+    name: "my_tool",
+    description: "Does something useful",
+    parameters: {
+      type: "object",
+      properties: { input: { type: "string", description: "Input value" } },
+      required: ["input"],
+    },
+  },
+  async (args) => {
+    const result = await doSomething(String(args.input));
+    return result;
+  }
+);
+```
+
+Pass the registry to `Scheduler` as the fifth constructor argument:
+
+```typescript
+const scheduler = new Scheduler(db, geminiClient, config, maxConcurrent, registry);
+```
+
+---
+
+## Agent Chaining
+
+Agent chaining lets you connect agents in a pipeline: when agent A completes successfully, its LLM output is automatically passed as context to agent B.
+
+### Configuring a chain
+
+Set the `chainTo` field to the **name** of the downstream agent:
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "Researcher",
+  "taskDescription": "Fetch the latest AI research papers from https://arxiv.org/list/cs.AI/recent and extract the five most relevant titles and abstracts.",
+  "tools": ["http_get"],
+  "cronExpression": "0 7 * * 1-5",
+  "enabled": true,
+  "chainTo": "Summariser"
+}
+```
+
+```http
+POST /agents
+Content-Type: application/json
+
+{
+  "name": "Summariser",
+  "taskDescription": "Write a concise executive summary of the research papers.",
+  "enabled": true
+}
+```
+
+When `Researcher` runs, its response is prepended to `Summariser`'s prompt:
+
+```
+Previous agent output:
+<Researcher's LLM response>
+
+Write a concise executive summary of the research papers.
+```
+
+### Chain execution behaviour
+
+- Chained agents run **inline** in the same scheduler tick, sequentially.
+- The downstream agent's own `cronExpression` is **not** evaluated for chained runs — only the head of the chain needs a schedule.
+- The downstream agent still gets its own execution record in the database.
+- If the upstream agent **fails**, the chain is **not** triggered.
+- **Circular chains** (A → B → A) are detected by a depth limit of 10 hops; the chain is aborted with a warning log when the limit is reached.
+- If the `chainTo` target agent does not exist, a warning is logged and the chain stops silently.
+
+---
+
 ## Development
 
 ### Available scripts
@@ -409,20 +539,22 @@ src/
 ├── agent.ts           # Zod schemas: Agent, ExecutionResult
 ├── agentRepository.ts # SQLite CRUD for agents + executions
 ├── apiServer.ts       # HTTP REST API
+├── builtinTools.ts    # Built-in tools: current_time, http_get
 ├── config.ts          # Zod-validated config loader
 ├── cronValidator.ts   # Cron expression validator
 ├── database.ts        # SQLite promise helpers
 ├── emailNotifier.ts   # SMTP email sender
 ├── errors.ts          # Centralized error types
-├── geminiClient.ts    # Google Gemini client wrapper
+├── geminiClient.ts    # Google Gemini client wrapper (text + tools)
 ├── index.ts           # Application entry point + graceful shutdown
 ├── logger.ts          # Structured JSON logger
 ├── migrations.ts      # Database migrations
 ├── nlScheduleParser.ts# Natural language → cron parser
 ├── observability.ts   # Metrics, health, status snapshot
-├── promptBuilder.ts   # LLM prompt construction
+├── promptBuilder.ts   # LLM prompt construction (supports previousOutput)
 ├── retryRunner.ts     # Timeout, retry, back-off
 ├── runAgent.ts        # Agent execution orchestrator
-└── scheduler.ts       # Cron scheduler with idempotency + semaphore
+├── scheduler.ts       # Cron scheduler with idempotency + semaphore + chaining
+└── toolRegistry.ts    # Tool registry and ToolDefinition schema
 ```
 

@@ -155,7 +155,7 @@ This roadmap breaks the challenge into small, atomic tasks that can be implement
 ## Phase 10: Stretch Goals (Going Further)
 
 - [x] Add tool/skill execution support (MCP integration).
-- [ ] Add agent chaining (output of one agent as input to another).
+- [x] Add agent chaining (output of one agent as input to another).
 - [ ] Add external data fetch modules (RSS/API/web sources).
 - [ ] Add LLM quota/rate-limit-aware scheduler staggering.
 - [ ] Build optional web dashboard for agent status and timelines.
